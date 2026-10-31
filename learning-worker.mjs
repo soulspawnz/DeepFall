@@ -22,6 +22,7 @@ self.onmessage=async({data})=>{
    self.postMessage({type:'done',recovered:true});return;
   }
   const player=new LearningPlayer(data.context,data.saved);
+  player.upgrade();
   if(!player.baseline&&!cancelled){
    const run=await consume(player.attempt({learn:false}),'baseline',0);
    if(run&&!cancelled){player.baseline=summary(run);await publish({type:'record',kind:'baseline',attempt:0,run,saved:player.export()});}

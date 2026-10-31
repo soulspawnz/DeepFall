@@ -37,6 +37,7 @@ export class SIDEngine {
     this.music = true;
     this.effects = true;
     this.paused = false;
+    this.mood='play';this.moodFrame=0;
     this.samples = 0;
     this.frame = 0;
     this.nextFrame = 0;
@@ -73,6 +74,10 @@ export class SIDEngine {
     this.write(voice * 7 + 5, ad); this.write(voice * 7 + 6, sr);
   }
   configure(settings) {
+    if(['play','pause','death','silent'].includes(settings.mood)&&settings.mood!==this.mood){
+      this.mood=settings.mood;this.moodFrame=0;
+      for(let i=0;i<3;i++)this.gate(i,0);
+    }
     if(settings.effects===false&&this.effects&&this.profile==='original')for(let i=0;i<3;i++)this.gate(i,0);
     if(settings.profile&&this.profile!==settings.profile){this.profile=settings.profile;this.setModel(this.model);}
     if(settings.scene)this.originalSFX.scene=settings.scene;
@@ -97,6 +102,18 @@ export class SIDEngine {
   }
   soundCheck() { this.demoFrame = this.frame; }
   clockFrame() {
+    if(this.mood==='pause'||this.mood==='death'){
+      // New state themes, sequenced on the same three-voice PAL SID.
+      // Let the original death effect finish before the short lament begins.
+      if(this.mood==='death'&&this.moodFrame<125){
+        if(this.profile==='original')this.originalSFX.tick(this.effects,false);
+        else if(this.effect){const e=this.effect,p=e.patch;if(e.age===1)this.gate(2,p.wave|1);this.frequency(2,p.hz[Math.min(e.age,p.hz.length-1)]);if(e.age>=p.hz.length)this.gate(2,p.wave);if(++e.age>p.hz.length+7){this.effect=null;this.gate(2,0);}}
+        this.moodFrame++;this.frame++;return;
+      }
+      if(this.music)this.stateMusic();
+      else for(let i=0;i<3;i++)this.gate(i,0);
+      this.moodFrame++;this.frame++;return;
+    }
     if (this.demoFrame !== null) {
       const elapsed = this.frame - this.demoFrame;
       const showcase = ['gem', 'dig', 'land', 'push', 'unlock', 'rewind', 'blast', 'death', 'win'];
@@ -139,12 +156,12 @@ export class SIDEngine {
   }
   render(buffer) {
     buffer.fill(0);
-    if (this.paused) return;
+    if (this.paused&&!(this.music&&this.mood==='pause')) return;
     let offset = 0;
     while (offset < buffer.length) {
       if (this.samples >= this.nextFrame) {
         if(this.clockFrames%20===0)this.clockFrame();
-        if(this.profile==='original'&&this.effects)this.originalSFX.subtick();
+        if(this.profile==='original'&&this.effects&&this.mood==='play')this.originalSFX.subtick();
         this.nextFrame = Math.round(++this.clockFrames * this.rate / 1000);
       }
       const count = Math.min(buffer.length - offset, this.nextFrame - this.samples);
@@ -155,6 +172,19 @@ export class SIDEngine {
     }
     for (let i = 0; i < buffer.length; i++) buffer[i] *= this.master;
     if(!this.music&&!this.effects)buffer.fill(0);
+  }
+  stateMusic(){
+    const death=this.mood==='death',age=this.moodFrame-(death?125:0),duration=death?18:24;
+    if(death&&age>=144){for(let i=0;i<3;i++)this.gate(i,0);return;}
+    const notes=death?[76,74,71,67,66,64,59,52]:[64,71,76,78,71,67,74,71];
+    const sub=age%duration,beat=Math.floor(age/duration)%notes.length;
+    if(sub===0){
+      this.instrument(0,0x10,noteHz(notes[beat]),0x24,0x56);
+      this.instrument(1,0x40,noteHz((death?40:40)+(death?Math.max(0,7-beat):[0,7,3,7][beat%4])),0x35,0x45,0x600);
+      this.gate(2,0);this.write(0x17,0);this.write(0x18,15);
+    }
+    if(sub===1){this.gate(0,0x11);this.gate(1,0x41);}
+    if(sub===duration-5){this.gate(0,0x10);this.gate(1,0x40);}
   }
   stats() { return { model: this.model, clock: PAL_CLOCK, frame: this.frame, samples: this.samples, writes: this.registerWrites, effects: this.effectCount, lastEffect: this.lastEffect, voices: 3 }; }
 }

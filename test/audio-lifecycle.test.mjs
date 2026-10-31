@@ -34,3 +34,14 @@ test('the native output gate mutes pause and disable independently of worklet up
  audio.disable();assert.equal(gain.value,0);assert.deepEqual(events.at(-1),['suspend',0]);
  audio.enabled=true;audio.configure({paused:true});assert.equal(gain.value,0);audio.configure({paused:false});assert.equal(gain.value,1);
 });
+test('pause and death have distinct SID themes, and music-off keeps pause silent',()=>{
+ for(const model of ['6581','8580']){
+  const paused=new SIDEngine(48000,model,'original');paused.configure({paused:true,mood:'pause'});
+  const pauseAudio=render(paused,1);assert.ok(acRms(pauseAudio)>1e-5);
+  const dead=new SIDEngine(48000,model,'original');dead.configure({mood:'death',scene:{active:false}});dead.trigger(['death']);
+  const deathAudio=render(dead,3.2);assert.ok(acRms(deathAudio)>1e-5);assert.notDeepEqual(deathAudio,pauseAudio);
+  assert.ok(acRms(render(dead,6))<1e-6,'death theme finishes');
+  paused.configure({music:false});assert.equal(acRms(render(paused,.1)),0);
+  paused.configure({music:true,mood:'silent'});assert.equal(acRms(render(paused,.1)),0,'hidden tab remains silent');
+ }
+});

@@ -2,7 +2,7 @@ import {Game} from './engine.mjs';
 import {ACTIONS,cloneGame} from './simulation.mjs';
 
 export const LEARNING_VERSION='deepfall-experience-2';
-const LIMIT=3000;
+const LIMIT=20000;
 function validSummary(r){return r&&['won','dead','budget'].includes(r.status)&&Number.isInteger(r.diamonds)&&r.diamonds>=0&&r.diamonds<=10000&&Number.isInteger(r.target)&&r.target>=0&&r.target<=1000&&Number.isInteger(r.ticks)&&r.ticks>0&&r.ticks<=4000&&Number.isFinite(r.score)&&Number.isFinite(r.remaining)&&typeof r.route==='string'&&r.route.length<=32;}
 function validInput(input){return Array.isArray(input)&&input.length>0&&input.length<=4000&&input.every(a=>Array.isArray(a)&&a.length===3&&Number.isInteger(a[0])&&Number.isInteger(a[1])&&Math.abs(a[0])+Math.abs(a[1])<=1&&typeof a[2]==='boolean');}
 function hash(text) {
@@ -10,10 +10,12 @@ function hash(text) {
  for(let n=0;n<text.length;n++){const c=text.charCodeAt(n);a=Math.imul(a^c,16777619);b=Math.imul(b,33)^c;}
  return (a>>>0).toString(36)+(b>>>0).toString(36);
 }
+export const inputFingerprint=input=>hash(JSON.stringify(input));
 export function contextKey(context){return `${context.campaign}:${context.difficulty}:${context.index}`;}
-function signature(g) {
+function signature(g,revision=1) {
  // Remaining time is deliberately excluded: experience transfers across waits.
  const s=g.snapshot();delete s.remaining;delete s.tick;delete s.trappedFor;
+ if(revision>=2)delete s.score;
  if(!g.grid.some(r=>r.includes('a')))s.amoeba={dead:null,slow:0};
  if(!s.magic.active)s.magic.remaining=0;
  return hash(JSON.stringify(s));
@@ -72,34 +74,37 @@ function roll(g,path) {
 // Monte Carlo control over physics-simulated routes. Persistent action values
 // are updated from whole-attempt outcomes, including failure after the quota.
 export class LearningPlayer {
- constructor(context, saved=null) {
+ constructor(context, saved=null,revision=null) {
   this.context={campaign:context.campaign,index:context.index,difficulty:context.difficulty};
   const valid=saved?.version===LEARNING_VERSION&&contextKey(saved.context??{})===contextKey(this.context);
-  this.values=new Map(valid&&Array.isArray(saved.values)?saved.values.slice(-LIMIT).filter(entry=>Array.isArray(entry)&&entry.length===2&&typeof entry[0]==='string'&&entry[0].length<=128&&Number.isFinite(entry[1]?.mean)&&Math.abs(entry[1].mean)<1e7&&Number.isInteger(entry[1]?.n)&&entry[1].n>0&&entry[1].n<=1e9):[]);
+  this.policyRevision=revision??(valid?(saved.policyRevision??1):2);
+  this.policyStartAttempt=valid?(saved.policyStartAttempt??0):0;
+  this.values=new Map(valid&&Array.isArray(saved.values)?saved.values.slice(-(this.policyRevision>=2?LIMIT:3000)).filter(entry=>Array.isArray(entry)&&entry.length===2&&typeof entry[0]==='string'&&entry[0].length<=128&&Number.isFinite(entry[1]?.mean)&&Math.abs(entry[1].mean)<1e7&&Number.isInteger(entry[1]?.n)&&entry[1].n>0&&entry[1].n<=1e9):[]);
   this.attempts=valid&&Number.isInteger(saved.attempts)?Math.min(1e9,Math.max(0,saved.attempts)):0;
   this.results=valid&&Array.isArray(saved.results)?saved.results.slice(-100).filter(validSummary):[];
   this.best=valid&&validSummary(saved.best)&&saved.best.status==='won'&&contextKey(saved.best)===contextKey(this.context)&&validInput(saved.best.input)?saved.best:null;
   this.baseline=valid&&validSummary(saved.baseline)?saved.baseline:null;this.evaluation=valid&&validSummary(saved.evaluation)?saved.evaluation:null;
  }
- export() {return {version:LEARNING_VERSION,context:this.context,attempts:this.attempts,values:[...this.values],results:this.results,best:this.best,baseline:this.baseline,evaluation:this.evaluation};}
+ export() {return {version:LEARNING_VERSION,policyRevision:this.policyRevision,policyStartAttempt:this.policyStartAttempt,context:this.context,attempts:this.attempts,values:[...this.values],results:this.results,best:this.best,baseline:this.baseline,evaluation:this.evaluation};}
+ upgrade(){if(this.policyRevision<2){this.policyRevision=2;this.policyStartAttempt=this.attempts;this.values.clear();this.evaluation=null;}}
  *attempt({seed=this.attempts+1,exploration=.25,learn=true,maxDecisions=120,fixture=null,fastTrappedTimer=true}={}) {
   const game=new Game(this.context.index,'classic',fixture,{...this.context,fastTrappedTimer});game.start();
   const rng=randomGenerator(seed),input=[],history=[],visits=new Map();
   while(!game.born&&game.status==='playing'){game.step();input.push([0,0,false]);}
   let current=game;
   for(let decision=0;decision<maxDecisions&&current.status==='playing';decision++) {
-   const state=signature(current),choices=targets(current),scored=[];
+   const state=signature(current,this.policyRevision),choices=targets(current),scored=[];
    let totalVisits=1;
    for(const choice of choices)totalVisits+=this.values.get(`${state}/${choice.id}`)?.n??0;
    for(const choice of choices) {
     const {next,actions,digs}=roll(current,choice.path),entry=this.values.get(`${state}/${choice.id}`);
-    const position=`${next.player.x},${next.player.y}`,stuck=signature(next)===state;
+    const position=`${next.player.x},${next.player.y}`,stuck=signature(next,this.policyRevision)===state;
     const immediate=(Math.min(next.collected,next.target)-Math.min(current.collected,current.target))*30+(next.status==='won'?2000:0)-(!canSurvive(next)?4000:0)
       -actions.length*.15+Math.min(digs,8)*.15-(visits.get(position)??0)*3-(stuck?8:0);
     const curiosity=learn?5*Math.sqrt(Math.log(totalVisits+1)/((entry?.n??0)+1)):0;
     // The learned return already includes the eventual outcome; adding the
     // greedy immediate reward again would bias against learned detours.
-    scored.push({choice,next,actions,key:`${state}/${choice.id}`,score:(entry?entry.mean:immediate)+curiosity-(visits.get(position)??0)*3});
+    scored.push({choice,next,actions,immediate,key:`${state}/${choice.id}`,score:(entry?entry.mean:immediate)+curiosity-(visits.get(position)??0)*3});
    }
    scored.sort((a,b)=>b.score-a.score);
    const safe=scored.filter(c=>canSurvive(c.next));
@@ -107,22 +112,23 @@ export class LearningPlayer {
    // Exploration can choose a different safe route, rather than random suicide.
    const chosen=learn&&rng()<exploration?pool[Math.floor(rng()*Math.min(5,pool.length))]:pool[0];
    if(!chosen)break;
-   history.push(chosen.key);current=chosen.next;input.push(...chosen.actions);
+   history.push(this.policyRevision>=2?{key:chosen.key,reward:chosen.immediate}:chosen.key);current=chosen.next;input.push(...chosen.actions);
    const position=`${current.player.x},${current.player.y}`;visits.set(position,(visits.get(position)??0)+1);
    yield {decision:decision+1,diamonds:current.collected,ticks:input.length};
   }
   const status=current.status==='playing'?'budget':current.status;
   const result={...this.context,status,diamonds:current.collected,target:current.target,ticks:input.length,
-   score:current.score,remaining:current.remaining,reason:current.reason,route:hash(JSON.stringify(input)),seed,exploration:learn?exploration:0,fastTrappedTimer,input};
+   score:current.score,remaining:current.remaining,reason:current.reason,route:inputFingerprint(input),seed,exploration:learn?exploration:0,fastTrappedTimer,input};
   if(learn) {
    const outcome=(status==='won'?2000:status==='dead'?-400:-200)+Math.min(current.collected,current.target)*10-input.length*.15;
+   let future=status==='dead'?-400:status==='budget'?-100:0;
    for(let i=history.length-1;i>=0;i--) {
-    const key=history[i],old=this.values.get(key)??{n:0,mean:0};
-    const value=outcome-Math.min(100,(history.length-1-i)*.1);
+    const key=this.policyRevision>=2?history[i].key:history[i],old=this.values.get(key)??{n:0,mean:0};
+    const value=this.policyRevision>=2?(future=history[i].reward+.92*future):outcome-Math.min(100,(history.length-1-i)*.1);
     const n=old.n+1,mean=old.mean+(value-old.mean)/Math.min(n,8);
     this.values.delete(key);this.values.set(key,{n,mean});
    }
-   while(this.values.size>LIMIT)this.values.delete(this.values.keys().next().value);
+   while(this.values.size>(this.policyRevision>=2?LIMIT:3000))this.values.delete(this.values.keys().next().value);
    this.attempts++;const {input:_,...summary}=result;this.results.push(summary);this.results=this.results.slice(-100);
    if(status==='won'&&(!this.best||result.ticks<this.best.ticks))this.best=result;
   }
@@ -134,7 +140,8 @@ export class LearningPlayer {
 // Recover older simulated traces only when every stored fingerprint matches.
 export function* recoverLearningReplays(context,saved){
  if(saved?.version!==LEARNING_VERSION||contextKey(saved.context??{})!==contextKey(context))throw new Error('Recovery requires a matching learning version and cave.');
- const original=new LearningPlayer(context,saved),fresh=new LearningPlayer(context),records=[];
+ const original=new LearningPlayer(context,saved),fresh=new LearningPlayer(context,null,saved.policyRevision??1),records=[];
+ if(saved.policyStartAttempt>0)throw new Error('Pre-upgrade input traces cannot be reconstructed by the newer policy. Import their saved replay backup instead.');
  if(original.attempts!==original.results.length||original.attempts>100)throw new Error('Older inputs are unavailable for a complete verified reconstruction. Existing recordings are preserved.');
  const verify=(actual,expected)=>{
   if(actual.route!==expected.route||actual.status!==expected.status||actual.diamonds!==expected.diamonds||actual.ticks!==expected.ticks||actual.score!==expected.score)

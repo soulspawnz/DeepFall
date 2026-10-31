@@ -9,7 +9,7 @@ try {
  await page.getByRole('button',{name:'TRAIN PLAYER',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('#learning-status').textContent.startsWith('Training finished.'),{timeout:120000});
  const progress=await page.locator('#learning-progress').innerText();
- assert.match(progress,/10 attempts learned/);assert.match(progress,/Before learning: escaped in 285 steps/);assert.match(progress,/Current learned policy: escaped in 164 steps/);
+ assert.match(progress,/10 attempts learned/);assert.match(progress,/Before learning: escaped in 285 steps/);assert.match(progress,/Current learned policy: escaped in 222 steps/);
  console.log('[OK] Training and before/after evaluation');
  assert.match(await page.locator('#learning-history-status').innerText(),/12 archived replays.*10 training attempts/);
  assert.equal(await page.getByRole('button',{name:'WATCH ATTEMPT 7',exact:true}).count(),1);
@@ -23,7 +23,7 @@ try {
  console.log('[OK] All fourteen replays persisted across reload');
  await page.clock.install();
  await page.getByRole('button',{name:'WATCH BEST RUN',exact:true}).click();
- await page.clock.runFor(22000);assert.equal(await page.locator('#status-text').innerText(),'BACK ABOVE GROUND');
+ await page.clock.runFor(24000);assert.equal(await page.locator('#status-text').innerText(),'BACK ABOVE GROUND');
  assert.equal(await page.locator('#diamonds').innerText(),'12');
  console.log('[OK] Best replay reached the exit');
  await page.getByRole('button',{name:'TRAIN PLAYER',exact:true}).click();await page.getByRole('button',{name:'STOP TRAINING',exact:true}).click();

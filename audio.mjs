@@ -35,7 +35,7 @@ export class SIDAudio {
   }
   muteOutput(immediate=false) {
     if(!this.outputGain)return;
-    const target=this.enabled&&!this.settings.paused?1:0;
+    const target=this.enabled&&(!this.settings.paused||(this.settings.music&&this.settings.mood==='pause'))?1:0;
     if(target===this.outputTarget&&!immediate)return;
     this.outputTarget=target;const gain=this.outputGain.gain,now=this.context.currentTime;
     gain.cancelScheduledValues(now);gain.setValueAtTime(gain.value,now);

@@ -3,7 +3,7 @@ import { Game, CAVES as EXPEDITION_CAVES, WIDTH, HEIGHT, STEP } from './engine.m
 import { ORIGINAL_CAVES, decodeOriginal, nextOriginal } from './original-caves.mjs';
 import { SIDAudio } from './audio.mjs';
 import { setupFullscreen } from './fullscreen.mjs';
-import {LiveRecording, loadLiveRuns, saveLiveRun, applyReplayAction} from './live-replays.mjs';
+import {LiveRecording, loadLiveRuns, saveLiveRun, applyReplayAction,importLiveRun} from './live-replays.mjs';
 import {mountLearning} from './learning-ui.mjs';
 
 const $ = id => document.getElementById(id);
@@ -45,6 +45,9 @@ function showLibrary(){
  }
  textElement('p','C has not been cleared live. Best attempt so far: 19/24 diamonds, ended in death. A and B do not establish a full campaign completion.',library);
  textElement('h4','Recorded live wins',library);
+ const importButton=textElement('button','IMPORT LIVE RECORDING',library),input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.hidden=true;library.append(input);
+ importButton.addEventListener('click',()=>input.click());
+ input.addEventListener('change',async()=>{const file=input.files[0];input.value='';if(!file)return;try{if(file.size>8*1024*1024)throw new Error('Choose a recording smaller than 8 MB.');const added=importLiveRun(localStorage,JSON.parse(await file.text()));libraryMessage.textContent=added?'Live recording imported and verified.':'This recording is already saved.';showLibrary();}catch(error){libraryMessage.textContent=`Import failed: ${error.message}`;}});
  let runs=[];try{runs=loadLiveRuns(localStorage);}catch{}
  if(!runs.length)textElement('p','No exact live-input recordings yet. Earlier screenshots are kept separately above.',library);
  const saved=document.createElement('div');saved.className='playtest-cards';library.append(saved);
@@ -157,7 +160,7 @@ function updateCaves() {
   if(active) $('caves').scrollTop=active.offsetTop-$('caves').firstElementChild.offsetTop;
 }
 function sync() {
-  sidAudio.configure({ paused: game.status === 'paused' || document.hidden });
+  sidAudio.configure({ paused: document.hidden || game.status === 'paused', mood: document.hidden?'silent':game.status==='paused'?'pause':game.status==='dead'?'death':'play' });
   const cave=caveInfo(selected);
   $('cave-number').textContent = campaign==='original' ? `${cave.id} / LEVEL ${difficulty}` : `${String(selected+1).padStart(2,'0')} / 03`;
   $('cave-name').textContent = cave.name.toUpperCase();

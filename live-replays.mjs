@@ -1,3 +1,4 @@
+import {Game} from './engine.mjs';
 export const REPLAY_STORAGE_KEY = 'deepfall.live-wins.v1';
 
 // Passive recording only: the game supplies the input it actually consumed.
@@ -49,4 +50,15 @@ export function applyReplayAction(game, action) {
     const [dx,dy,snap=false]=action;
     game.step({dx,dy,snap});
   }
+}
+
+export function importLiveRun(storage,run){
+ if(!validLiveRun(run))throw new Error('Choose an exported live recording.');
+ const game=new Game(run.index,run.mode,null,{campaign:run.campaign,difficulty:run.difficulty,fastTrappedTimer:Boolean(run.fastTrappedTimer)});game.start();
+ for(const action of run.actions)applyReplayAction(game,action);
+ if(game.status!=='won'||game.collected!==run.result.diamonds||game.score!==run.result.score)throw new Error('The recording does not reproduce its saved win.');
+ const runs=loadLiveRuns(storage);
+ if(runs.some(r=>r.campaign===run.campaign&&r.index===run.index&&r.difficulty===run.difficulty&&r.mode===run.mode&&JSON.stringify(r.actions)===JSON.stringify(run.actions)))return false;
+ if(runs.length>=10)throw new Error('The live-recording library is full (10 runs). Existing recordings were preserved.');
+ storage.setItem(REPLAY_STORAGE_KEY,JSON.stringify([run,...runs]));return true;
 }

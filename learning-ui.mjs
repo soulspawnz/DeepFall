@@ -1,6 +1,6 @@
 import {LEARNING_VERSION,LearningPlayer,contextKey} from './learning-player.mjs';
 import {ORIGINAL_CAVES} from './original-caves.mjs';
-import {learningReplay,replayAttempt,readLearningModel,saveLearningRecords,learningReplayPage,allLearningReplays} from './learning-archive.mjs';
+import {learningReplay,replayAttempt,readLearningModel,saveLearningRecords,learningReplayPage,allLearningReplays,importLearningModel,importLearningReplays} from './learning-archive.mjs';
 
 const outcome={won:'Escaped',dead:'Died',budget:'Attempt limit'};
 function downloadJSON(name,value){
@@ -10,11 +10,17 @@ function downloadJSON(name,value){
 
 export function mountLearning({getContext,pause,onWatch}){
  const section=document.createElement('section');section.className='playtest-library learning-player';section.setAttribute('aria-label','Learning player');
- function text(tag,value,parent=section){const e=document.createElement(tag);e.textContent=value;parent.append(e);return e;}
- text('h3','Learning player');
+ const header=document.createElement('div');header.className='learning-heading';section.append(header);
+ const title=document.createElement('h3');title.textContent='Learning player';header.append(title);
+ const content=document.createElement('div');content.id='learning-content';section.append(content);
+ function text(tag,value,parent=content){const e=document.createElement(tag);e.textContent=value;parent.append(e);return e;}
+ const toggle=text('button','HIDE CONTENT',header);toggle.setAttribute('aria-controls',content.id);
+ let collapsed=false;try{collapsed=localStorage.getItem('deepfall.learning.collapsed')==='true';}catch{}
+ function collapse(){content.hidden=collapsed;toggle.textContent=collapsed?'SHOW CONTENT':'HIDE CONTENT';toggle.setAttribute('aria-expanded',String(!collapsed));}
+ toggle.addEventListener('click',()=>{collapsed=!collapsed;collapse();try{localStorage.setItem('deepfall.learning.collapsed',String(collapsed));}catch{}});collapse();
  text('p','Train on the selected cave. The player explores routes and remembers which choices led to good or bad outcomes. Simulated training and AI replays are separate from your live runs.');
  text('p','Every completed training attempt, baseline and evaluation is saved in this browser, including failures. Old replays are not automatically deleted. Export all replays for a separate backup; clearing browser data removes local learning and replays.');
- const controls=document.createElement('div');controls.className='learning-controls';section.append(controls);
+ const controls=document.createElement('div');controls.className='learning-controls';content.append(controls);
  const countLabel=text('label','Attempts ',controls),count=document.createElement('select');count.setAttribute('aria-label','Training attempts');
  for(const n of [10,25,50,100]){const option=text('option',String(n),count);option.value=String(n);}countLabel.append(count);
  const exploreLabel=text('label','Explore new routes ',controls),explore=document.createElement('select');explore.setAttribute('aria-label','Exploration');
@@ -24,8 +30,14 @@ export function mountLearning({getContext,pause,onWatch}){
  const status=text('p','Loading saved learning…');status.id='learning-status';status.setAttribute('role','status');
  const progress=text('p','');progress.id='learning-progress';
  const historyInfo=text('p','');historyInfo.id='learning-history-status';
- const table=document.createElement('table');table.className='learning-results';table.innerHTML='<caption>All saved AI replays for this cave</caption><thead><tr><th>Run</th><th>Result</th><th>Diamonds</th><th>Steps</th><th>Replay</th></tr></thead><tbody></tbody>';section.append(table);const tbody=table.querySelector('tbody');
- const pager=document.createElement('div');pager.className='learning-controls';section.append(pager);
+ const filters=document.createElement('div');filters.className='learning-controls learning-filters';content.append(filters);
+ function select(label,options,initial){const l=text('label',label+' ',filters),s=document.createElement('select');s.setAttribute('aria-label',label);for(const [value,name]of options){const o=text('option',name,s);o.value=value;}s.value=initial;l.append(s);s.addEventListener('change',()=>{page=0;refreshHistory().catch(e=>status.textContent=e.message);});return s;}
+ const pageSize=select('Attempts per page',[10,25,50,100].map(n=>[String(n),String(n)]),'10');
+ const sort=select('Sort replays',[['newest','Newest first'],['oldest','Oldest first'],['steps','Fewest steps'],['diamonds','Most diamonds']],'newest');
+ const resultFilter=select('Replay result',[['all','All results'],['won','Escaped'],['dead','Died'],['budget','Attempt limit']],'all');
+ const kindFilter=select('Replay type',[['all','All types'],['training','Training'],['baseline','Baseline'],['evaluation','Evaluation']],'all');
+ const table=document.createElement('table');table.className='learning-results';table.innerHTML='<caption>Saved AI replays for this cave</caption><thead><tr><th>Run</th><th>Result</th><th>Diamonds</th><th>Steps</th><th>Replay</th></tr></thead><tbody></tbody>';content.append(table);const tbody=table.querySelector('tbody');
+ const pager=document.createElement('div');pager.className='learning-controls';content.append(pager);
  const train=button('TRAIN PLAYER',()=>startJob('train',false));
  const stop=button('STOP TRAINING',async()=>{
   worker?.terminate();worker=null;ready=false;render();status.textContent='Stopping and finishing replay storage…';
@@ -34,6 +46,22 @@ export function mountLearning({getContext,pause,onWatch}){
  const watchNext=button('WATCH NEXT ATTEMPT',()=>startJob('train',true));
  const watchBest=button('WATCH BEST RUN',()=>{if(saved?.best){pause();onWatch({...saved.best,mode:'classic',learningAttempts:saved.attempts,replayKind:'best'});}});
  const exportLearning=button('EXPORT LEARNING',()=>{if(saved)downloadJSON(`deepfall-learning-${loadedKey.replaceAll(':','-')}.json`,saved);});
+ let importing=false;
+ const fileInput=document.createElement('input');fileInput.type='file';fileInput.accept='.json,application/json';fileInput.hidden=true;content.append(fileInput);
+ let importKind='learning';
+ const importModel=button('IMPORT LEARNING',()=>{importKind='learning';fileInput.click();});
+ const importReplays=button('IMPORT REPLAYS',()=>{importKind='replays';fileInput.click();});
+ fileInput.addEventListener('change',async()=>{
+  const file=fileInput.files[0];fileInput.value='';if(!file||worker||importing)return;
+  const context={...getContext()},key=loadedKey;importing=true;ready=false;render();status.textContent='Checking import…';
+  try{
+   if(file.size>32*1024*1024)throw new Error('Choose a JSON backup smaller than 32 MB.');
+   const data=JSON.parse(await file.text());
+   if(importKind==='learning'){await importLearningModel(data,context);if(key===loadedKey){await load(true);status.textContent='Learning imported. Continue training or evaluate it with Watch Next Attempt.';}}
+   else {const result=await importLearningReplays(data,(n,total)=>{if(key===loadedKey)status.textContent=`Verifying replay ${n}/${total}…`;});if(key===loadedKey){await refreshHistory();status.textContent=`Imported ${result.added} replays; ${result.duplicates} duplicates skipped. Learning weights are imported separately.`;}}
+  }catch(error){if(key===loadedKey)status.textContent=`Import failed: ${error.message}`;}
+  finally{importing=false;if(key===loadedKey)ready=true;render();}
+ });
  const recover=button('RECOVER EARLIER REPLAYS',()=>startJob('recover',false));
  const watchAll=button('WATCH ALL REPLAYS',async()=>{
   try{const records=await allLearningReplays(getContext());if(records.length){pause();onWatch(records.map(replayAttempt));}}catch(error){status.textContent=error.message;}
@@ -47,11 +75,15 @@ export function mountLearning({getContext,pause,onWatch}){
  function render(){
   const results=saved?.results??[],wins=results.filter(r=>r.status==='won').length,recent=results.slice(-10),recentWins=recent.filter(r=>r.status==='won').length;
   const describe=r=>r.status==='won'?`escaped in ${r.ticks} steps`:`${r.diamonds}/${r.target} diamonds, ${r.status==='budget'?'attempt limit reached':'died'}`;
-  progress.textContent=`${saved?.attempts??0} attempts learned · ${wins}/${results.length} wins in retained history · last ${recent.length}: ${recentWins} wins · ${new Set(results.map(r=>r.route)).size} distinct routes.`+(saved?.best?` Best win: ${saved.best.ticks} steps, ${saved.best.diamonds}/${saved.best.target} diamonds.`:' No winning route saved yet.')+(saved?.baseline?` Before learning: ${describe(saved.baseline)}.`:'')+(saved?.evaluation?` Current learned policy: ${describe(saved.evaluation)}.`:'');
+  const prior=results.slice(-20,-10),priorWins=prior.filter(r=>r.status==='won').length;
+  const improved=saved?.evaluation&&saved?.baseline&&(saved.evaluation.status==='won'&&(saved.baseline.status!=='won'||saved.evaluation.ticks<saved.baseline.ticks)||saved.evaluation.diamonds>saved.baseline.diamonds);
+  progress.textContent=`${saved?.attempts??0} attempts learned · ${wins}/${results.length} wins in retained history · last ${recent.length}: ${recentWins} wins${prior.length?` (previous ${prior.length}: ${priorWins})`:''} · ${new Set(results.map(r=>r.route)).size} distinct routes · ${saved?.values?.length??0} remembered decisions.`+(saved?.best?` Best win: ${saved.best.ticks} steps, ${saved.best.diamonds}/${saved.best.target} diamonds.`:' No winning route saved yet.')+(saved?.baseline?` Before learning: ${describe(saved.baseline)}.`:'')+(saved?.evaluation?` Current learned policy: ${describe(saved.evaluation)}. ${improved?'Measured improvement over baseline.':'No measured improvement over baseline yet; different routes alone are not progress.'}`:'')+((saved?.policyRevision??1)<2&&saved?.attempts?' Next training upgrades decision credit; saved replays and best runs are preserved.':'');
   train.disabled=!ready||Boolean(worker);stop.disabled=!worker;watchNext.disabled=!ready||Boolean(worker);watchBest.disabled=!saved?.best;exportLearning.disabled=!saved;
   const missing=Math.max(0,(saved?.attempts??0)-history.training);recover.hidden=!missing;recover.disabled=!ready||Boolean(worker);
-  historyInfo.textContent=`${history.total} archived replays for this cave, including ${history.training} training attempts.`+(missing?` ${missing} earlier attempts have summaries only; recovery saves only traces that reproduce exactly.`:'')+(history.total?` Showing ${page*25+1}–${Math.min(history.total,(page+1)*25)}. Use a row to watch one run, or Watch All Replays for chronological playback.`:'');
-  watchAll.disabled=!history.total;exportAll.disabled=!ready;previous.disabled=page===0;next.disabled=(page+1)*25>=history.total;
+  historyInfo.textContent=`${history.total} archived replays for this cave, including ${history.training} training attempts.`+(missing?` ${missing} earlier attempts have summaries only; recovery saves only traces that reproduce exactly.`:'')+` ${history.matched??0} match filters.`+(history.matched?` Showing ${page*Number(pageSize.value)+1}–${Math.min(history.matched,(page+1)*Number(pageSize.value))}. Page ${page+1} of ${Math.ceil(history.matched/Number(pageSize.value))}.`:' No matching replays.')+' Watch All plays the entire cave archive in chronological order.';
+  watchAll.disabled=!history.total;exportAll.disabled=!ready;previous.disabled=page===0;next.disabled=(page+1)*Number(pageSize.value)>=(history.matched??0);
+  if(saved?.policyStartAttempt>0)progress.textContent+=` Updated learning method: ${saved.attempts-saved.policyStartAttempt} attempts since upgrade; ${saved.policyStartAttempt} earlier attempts remain archived.`;
+  importModel.disabled=importReplays.disabled=!ready||Boolean(worker)||importing;
   tbody.replaceChildren();
   for(const record of history.records){
    const label=record.kind==='baseline'?'Before learning':record.kind==='evaluation'?`Evaluation after ${record.attempt}`:`Attempt ${record.attempt}`;
@@ -63,9 +95,9 @@ export function mountLearning({getContext,pause,onWatch}){
  }
  async function refreshHistory(){
   const token=++historyGeneration,key=loadedKey,context={...getContext()};
-  const value=await learningReplayPage(context,page);
+  const value=await learningReplayPage(context,page,Number(pageSize.value),{sort:sort.value,status:resultFilter.value,kind:kindFilter.value});
   if(token!==historyGeneration||key!==loadedKey)return;
-  history=value;if(page>0&&page*25>=history.total){page=Math.max(0,Math.ceil(history.total/25)-1);return refreshHistory();}render();
+  history=value;page=value.page;render();
  }
  function load(force=false){
   const context={...getContext()},key=contextKey(context);
@@ -86,7 +118,7 @@ export function mountLearning({getContext,pause,onWatch}){
   })();return loadPromise;
  }
  async function startJob(type,watch){
-  if(worker)return;await load();if(!ready||worker)return;
+  if(worker||importing)return;await load();if(!ready||worker||importing)return;
   const context={...getContext()},key=contextKey(context);if(key!==loadedKey)return;pause();
   try{
    const job=new Worker(new URL('./learning-worker.mjs',import.meta.url),{type:'module'});worker=job;render();

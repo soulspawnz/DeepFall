@@ -1,7 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {Game} from '../engine.mjs';
-import {LiveRecording, applyReplayAction, loadLiveRuns, saveLiveRun, REPLAY_STORAGE_KEY} from '../live-replays.mjs';
+import {LiveRecording, applyReplayAction, loadLiveRuns, saveLiveRun, importLiveRun, REPLAY_STORAGE_KEY} from '../live-replays.mjs';
+import {LearningPlayer} from '../learning-player.mjs';
 
 test('consumed inputs, snap and rewind reproduce a winning state exactly',()=>{
  const grid=Array.from({length:22},()=>Array(40).fill('#'));
@@ -27,4 +28,13 @@ test('consumed inputs, snap and rewind reproduce a winning state exactly',()=>{
 test('unsuccessful attempts are not saved as wins',()=>{
  const game=new Game();const recording=new LiveRecording({campaign:'deepfall',index:0,difficulty:1,mode:'echo'});
  assert.equal(recording.finish(game),null);
+});
+test('live import verifies the actual cave, deduplicates and preserves storage on a corrupt win',()=>{
+ const context={campaign:'original',index:0,difficulty:1},ai=new LearningPlayer(context).run({learn:false});
+ // Synthetic recording fixture using real simulated winning inputs.
+ const run={version:1,...context,mode:'classic',source:'live-input',fastTrappedTimer:true,actions:ai.input,result:{status:'won',diamonds:ai.diamonds,score:ai.score}};
+ const data=new Map(),storage={getItem:k=>data.get(k),setItem:(k,v)=>data.set(k,v)};
+ assert.equal(importLiveRun(storage,run),true);assert.equal(importLiveRun(storage,run),false);
+ assert.throws(()=>importLiveRun(storage,{...run,result:{...run.result,score:ai.score+1}}),/saved win/);
+ assert.equal(loadLiveRuns(storage).length,1);
 });
