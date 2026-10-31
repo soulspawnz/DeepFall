@@ -111,7 +111,7 @@ export function mountLearning({getContext,pause,onWatch}){
  text('p','Explore new routes, then test the learned choices.',training).className='learning-hint';
  const controls=document.createElement('div');controls.className='learning-controls';training.append(controls);
  const countLabel=text('label','Attempts ',controls),count=document.createElement('select');count.setAttribute('aria-label','Training attempts');
- for(const n of [10,25,50,100]){const option=text('option',String(n),count);option.value=String(n);}countLabel.append(count);
+ for(const n of [1,5,10,25,50,100]){const option=text('option',String(n),count);option.value=String(n);}count.value='10';countLabel.append(count);
  const exploreLabel=text('label','Exploration ',controls),explore=document.createElement('select');explore.setAttribute('aria-label','Exploration');
  for(const v of [.1,.25,.5]){const option=text('option',`${v*100}%`,explore);option.value=String(v);}explore.value='0.25';exploreLabel.append(explore);
  function button(label,fn,parent=controls){const b=text('button',label,parent);b.addEventListener('click',fn);return b;}
