@@ -1,11 +1,82 @@
 import {LEARNING_VERSION,LearningPlayer,contextKey} from './learning-player.mjs';
 import {ORIGINAL_CAVES} from './original-caves.mjs';
-import {learningReplay,replayAttempt,readLearningModel,saveLearningRecords,learningReplayPage,allLearningReplays,importLearningModel,importLearningReplays} from './learning-archive.mjs';
+import {learningReplay,replayAttempt,readLearningModel,saveLearningRecords,selectLearningReplays,learningProgress,allLearningReplays,importLearningModel,importLearningReplays} from './learning-archive.mjs';
 
 const outcome={won:'Escaped',dead:'Died',budget:'Attempt limit'};
 function downloadJSON(name,value){
  const url=URL.createObjectURL(new Blob([JSON.stringify(value)],{type:'application/json'})),a=document.createElement('a');
  a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+function mountLearningCharts(parent,watch){
+ const panel=document.createElement('section');panel.className='learning-charts';panel.setAttribute('aria-label','Learning progress graphs');parent.append(panel);
+ function el(tag,value,target=panel){const e=document.createElement(tag);e.textContent=value;target.append(e);return e;}
+ const heading=el('div','');heading.className='learning-chart-heading';el('h4','Learning history',heading);
+ const rangeLabel=el('label','Show ',heading),range=el('select','',rangeLabel);range.setAttribute('aria-label','Graph history range');
+ for(const [value,label]of [['0','All attempts'],['25','Last 25'],['50','Last 50'],['100','Last 100']]){const option=el('option',label,range);option.value=value;}
+ const stats=el('p','');stats.className='learning-chart-stats';
+ const controls=el('div','');controls.className='learning-chart-controls';
+ let metric='diamonds',data=learningProgress([]),expected=0,selectedId=null,visible=[],showEvaluations=true,chartWidth=720;
+ const buttons=new Map();
+ for(const [value,label]of [['diamonds','DIAMONDS'],['winrate','WIN RATE'],['steps','ESCAPE STEPS']]){const b=el('button',label,controls);b.type='button';b.addEventListener('click',()=>{metric=value;draw();});buttons.set(value,b);}
+ const evalLabel=el('label','',controls),evalToggle=document.createElement('input');evalToggle.type='checkbox';evalToggle.checked=true;evalToggle.setAttribute('aria-label','Show evaluation results');evalLabel.append(evalToggle,document.createTextNode(' Evaluations'));
+ const legend=el('p','');legend.className='learning-chart-legend';
+ const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 720 230');svg.setAttribute('role','img');svg.classList.add('learning-chart');panel.append(svg);
+ const note=el('p','');note.className='learning-chart-note';note.id='learning-chart-note';svg.setAttribute('aria-describedby',note.id);
+ const inspect=el('div','');inspect.className='learning-chart-inspect';
+ const sliderLabel=el('label','Inspect run ',inspect),slider=el('input','',sliderLabel);slider.type='range';slider.min='0';slider.step='1';slider.setAttribute('aria-label','Inspect learning run');
+ const detail=el('p','',inspect);detail.setAttribute('aria-live','polite');detail.id='learning-chart-selected';
+ const play=el('button','PLAY SELECTED RUN',inspect);play.type='button';play.addEventListener('click',()=>{const r=visible[Number(slider.value)];if(r)watch(r);});
+ function shape(tag,attrs,text){const e=document.createElementNS(svg.namespaceURI,tag);for(const [k,v]of Object.entries(attrs))e.setAttribute(k,String(v));if(text!==undefined)e.textContent=text;svg.append(e);return e;}
+ function draw(){
+  for(const [key,b]of buttons)b.setAttribute('aria-pressed',String(metric===key));
+  const count=Number(range.value),training=count?data.training.slice(-count):data.training;
+  const cutoff=count&&training.length?training[0].attempt:0;
+  const evaluations=showEvaluations?data.evaluations.filter(r=>r.attempt>=cutoff):[];
+  const baselines=!cutoff?data.baselines:[];
+  visible=[...training.map(p=>p.record),...evaluations,...baselines].sort((a,b)=>a.attempt-b.attempt||(a.order??0)-(b.order??0)||a.id.localeCompare(b.id));
+  const prior=visible.findIndex(r=>r.id===selectedId);slider.max=String(Math.max(0,visible.length-1));slider.value=String(prior>=0?prior:Math.max(0,visible.length-1));
+  slider.disabled=play.disabled=!visible.length;inspect.hidden=!visible.length;svg.replaceChildren();
+  chartWidth=Math.max(320,Math.min(960,panel.clientWidth||720));svg.setAttribute('viewBox',`0 0 ${chartWidth} 230`);
+  const left=46,right=chartWidth-16,top=18,bottom=194,first=cutoff,last=Math.max(first+1,...visible.map(r=>r.attempt));
+  const value=r=>metric==='diamonds'?r.run.diamonds:metric==='winrate'?(r.run.status==='won'?100:0):r.run.status==='won'?r.run.ticks:null;
+  const maximum=metric==='winrate'?100:metric==='diamonds'?Math.max(1,...visible.map(r=>Math.max(r.run.diamonds,r.run.target))):Math.max(100,...visible.filter(r=>r.run.status==='won').map(r=>r.run.ticks));
+  const tickStep=metric==='winrate'?25:metric==='diamonds'?Math.max(1,Math.ceil(maximum/5)):Math.max(25,Math.ceil(maximum/100)*25),upper=Math.ceil(maximum/tickStep)*tickStep;
+  const x=n=>left+(n-first)/(last-first)*(right-left),y=n=>bottom-n/upper*(bottom-top);
+  svg.setAttribute('aria-label',metric==='diamonds'?'Diamonds collected over training attempts, with evaluation results':metric==='winrate'?'Rolling training win rate, with individual evaluation outcomes':'Steps to escape for successful runs only');
+  for(let v=0;v<=upper;v+=tickStep){const yy=y(v);shape('line',{x1:left,x2:right,y1:yy,y2:yy,class:'chart-grid'});shape('text',{x:left-8,y:yy+3,'text-anchor':'end',class:'chart-axis'},metric==='winrate'?`${v}%`:String(v));}
+  shape('text',{x:left,y:218,class:'chart-axis'},`Attempt ${first}`);shape('text',{x:right,y:218,'text-anchor':'end',class:'chart-axis'},String(last));
+  const xStep=Math.max(1,Math.ceil((last-first)/20)*5);for(let n=first+xStep;n<last-(last-first)*.12;n+=xStep){shape('line',{x1:x(n),x2:x(n),y1:top,y2:bottom,class:'chart-grid'});shape('text',{x:x(n),y:218,'text-anchor':'middle',class:'chart-axis'},String(n));}
+  if(metric==='diamonds'&&visible.length){const target=visible[0].run.target;shape('line',{x1:left,x2:right,y1:y(target),y2:y(target),class:'chart-quota'});shape('text',{x:right-4,y:Math.max(top+10,y(target)-6),'text-anchor':'end',class:'chart-axis'},`Quota ${target}`);}
+  const points=training.map(p=>({record:p.record,value:metric==='winrate'?p.rollingWinRate:value(p.record)})).filter(p=>p.value!==null);
+  if(points.length)shape('path',{d:points.map((p,i)=>`${i?'L':'M'}${x(p.record.attempt).toFixed(2)},${y(p.value).toFixed(2)}`).join(' '),class:metric==='winrate'?'chart-best':'chart-training-line'});
+  if(metric!=='winrate'){
+   const best=training.map(p=>({attempt:p.attempt,value:metric==='diamonds'?p.bestDiamonds:p.bestWinTicks})).filter(p=>p.value!==null);
+   if(best.length)shape('path',{d:best.map((p,i)=>`${i?'H':'M'}${x(p.attempt).toFixed(2)}${i?'V':','}${y(p.value).toFixed(2)}`).join(' '),class:'chart-best'});
+  }
+  function point(record,v,evaluation=false,baseline=false){
+   if(v===null)return;const cx=x(record.attempt),cy=y(v),r=evaluation?4:record.run.status==='won'?3.5:2;
+   const p=shape(evaluation?'path':'circle',evaluation?{d:`M${cx},${cy-r}l${r},${r}l${-r},${r}l${-r},${-r}Z`,class:'chart-evaluation'}:{cx,cy,r,class:baseline?'chart-baseline':record.run.status==='won'?'chart-win':'chart-point'});
+   const title=document.createElementNS(svg.namespaceURI,'title');title.textContent=`${record.kind} ${record.attempt}: ${outcome[record.run.status]}, ${record.run.diamonds}/${record.run.target} diamonds, ${record.run.ticks} steps`;p.append(title);
+   p.addEventListener('pointerenter',()=>select(record));p.addEventListener('click',()=>select(record));
+  }
+  const stride=Math.max(1,Math.ceil(points.length/500));points.forEach((p,i)=>{if(i%stride===0||p.record.run.status==='won'||i===points.length-1)point(p.record,p.value);});
+  evaluations.forEach(r=>point(r,value(r),true));baselines.forEach(r=>point(r,value(r),false,true));
+  const marker=shape('circle',{r:6,class:'chart-selected',visibility:'hidden'});
+  function select(record){const index=visible.findIndex(r=>r.id===record.id);if(index<0)return;slider.value=String(index);selectedId=record.id;const r=record.run,v=metric==='winrate'&&record.kind==='training'?data.training.find(p=>p.record.id===record.id)?.rollingWinRate:value(record);
+   detail.textContent=`${record.kind==='baseline'?'Baseline':record.kind==='evaluation'?`Evaluation after ${record.attempt}`:`Attempt ${record.attempt}`} · ${outcome[r.status]} · ${r.diamonds}/${r.target} diamonds · ${r.ticks} steps`;
+   slider.setAttribute('aria-valuetext',detail.textContent);marker.setAttribute('visibility',v===null||v===undefined?'hidden':'visible');if(v!==null&&v!==undefined){marker.setAttribute('cx',String(x(record.attempt)));marker.setAttribute('cy',String(y(v)));}
+  }
+  slider.oninput=()=>{const r=visible[Number(slider.value)];if(r)select(r);};if(visible.length)select(visible[Number(slider.value)]);
+  const s=data.summary;stats.textContent=`${s.count} recorded training runs · ${s.wins} escape${s.wins===1?'':'s'} (${s.winRate===null?'—':s.winRate.toFixed(1)+'%'}) · first escape ${s.firstWin===null?'—':'#'+s.firstWin} · best escape ${s.bestWinTicks===null?'—':s.bestWinTicks+' steps'}`;
+  legend.textContent=(metric==='winrate'?'Green: rolling training win rate (up to 10 runs). Amber diamonds: individual evaluation outcomes.':`Green dots: training${metric==='steps'?' escapes':''}. Bright line: ${metric==='steps'?'best escape':'most diamonds'} so far. Amber diamonds: evaluations.`)+(baselines.length?' Hollow circle: baseline.':'');
+  const missing=Math.max(0,expected-s.count),hasValues=points.length||evaluations.some(r=>value(r)!==null)||baselines.some(r=>value(r)!==null);
+  note.textContent=!visible.length?'No recorded runs for this cave yet. Complete training to build a history.':!hasValues&&metric==='steps'?'No escapes in this range yet. Failed runs are excluded from escape speed.':metric==='steps'?'Successful escapes only; fewer steps is faster.':metric==='diamonds'?'Collecting the quota does not count as an escape. Inspect a point or use the slider to play its run.':'Evaluations are excluded from the training win rate.';
+  if(missing)note.textContent+=` ${missing} training inputs are missing from this archive; gaps are not filled in.`;
+ }
+ range.addEventListener('change',draw);evalToggle.addEventListener('change',()=>{showEvaluations=evalToggle.checked;draw();});
+ new ResizeObserver(()=>{const width=Math.max(320,Math.min(960,panel.clientWidth||720));if(width!==chartWidth)draw();}).observe(panel);
+ draw();return {update(records,attempts=0){data=learningProgress(records);expected=attempts;draw();}};
 }
 
 export function mountLearning({getContext,pause,onWatch}){
@@ -37,6 +108,7 @@ export function mountLearning({getContext,pause,onWatch}){
  let worker=null,saved=null,loadedKey='',ready=false,loadPromise=Promise.resolve(),generation=0,historyGeneration=0,page=0,history={total:0,training:0,records:[]},pendingSave=Promise.resolve();
  const actions=document.createElement('div');actions.className='learning-controls learning-actions';training.append(actions);
  const status=text('p','Loading saved learning…',training);status.id='learning-status';status.setAttribute('role','status');
+ const charts=mountLearningCharts(content,record=>{pause();onWatch(replayAttempt(record));});
  const report=document.createElement('details');report.className='learning-report';content.append(report);text('summary','Full learning report',report);
  const progress=text('p','',report);progress.id='learning-progress';
  const archiveHeader=document.createElement('div');archiveHeader.className='learning-archive-heading';content.append(archiveHeader);text('h4','AI replays',archiveHeader);
@@ -118,16 +190,16 @@ export function mountLearning({getContext,pause,onWatch}){
  }
  async function refreshHistory(){
   const token=++historyGeneration,key=loadedKey,context={...getContext()};
-  const value=await learningReplayPage(context,page,Number(pageSize.value),{sort:sort.value,status:resultFilter.value,kind:kindFilter.value});
+  const records=await allLearningReplays(context),value=selectLearningReplays(records,{page,size:Number(pageSize.value),sort:sort.value,status:resultFilter.value,kind:kindFilter.value});
   if(token!==historyGeneration||key!==loadedKey)return;
-  history=value;page=value.page;render();
+  history=value;page=value.page;charts.update(records,saved?.attempts??0);render();
  }
  function load(force=false){
   const context={...getContext()},key=contextKey(context);
   if(worker&&key!==loadedKey){worker.terminate();worker=null;}
   if(!force&&key===loadedKey)return loadPromise;
   if(worker)return loadPromise;
-  const token=++generation;loadedKey=key;ready=false;saved=null;page=0;history={total:0,training:0,records:[]};render();status.textContent='Loading saved learning and replay history…';
+  const token=++generation;loadedKey=key;ready=false;saved=null;page=0;history={total:0,training:0,records:[]};charts.update([]);render();status.textContent='Loading saved learning and replay history…';
   loadPromise=(async()=>{
    try{
     let model=await readLearningModel(context),legacy=false;

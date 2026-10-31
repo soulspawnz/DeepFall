@@ -53,6 +53,19 @@ export function selectLearningReplays(records,{page=0,size=10,sort='newest',stat
  size=[10,25,50,100].includes(size)?size:10;page=Math.max(0,Math.min(page,Math.ceil(filtered.length/size)-1));
  return {total:records.length,training:records.filter(r=>r.kind==='training').length,matched:filtered.length,page,records:filtered.slice(page*size,(page+1)*size)};
 }
+export function learningProgress(records,window=10){
+ window=Math.max(1,Math.floor(window));
+ const unique=[...new Map(records.map(r=>[r.id,r])).values()].sort((a,b)=>a.attempt-b.attempt||String(a.savedAt??'').localeCompare(String(b.savedAt??''))||a.id.localeCompare(b.id));
+ const rows=unique.filter(r=>r.kind==='training');let wins=0,bestDiamonds=0,bestWinTicks=null;
+ const training=rows.map((record,i)=>{
+  const r=record.run;if(r.status==='won'){wins++;bestWinTicks=Math.min(bestWinTicks??Infinity,r.ticks);}bestDiamonds=Math.max(bestDiamonds,r.diamonds);
+  const recent=rows.slice(Math.max(0,i-window+1),i+1);
+  return {record,attempt:record.attempt,rollingWinRate:recent.filter(r=>r.run.status==='won').length/recent.length*100,cumulativeWinRate:wins/(i+1)*100,bestDiamonds,bestWinTicks};
+ });
+ return {training,evaluations:unique.filter(r=>r.kind==='evaluation'),baselines:unique.filter(r=>r.kind==='baseline'),window,
+  summary:{count:rows.length,wins,winRate:rows.length?wins/rows.length*100:null,firstWin:rows.find(r=>r.run.status==='won')?.attempt??null,bestWinTicks,
+   deaths:rows.filter(r=>r.run.status==='dead').length,limited:rows.filter(r=>r.run.status==='budget').length}};
+}
 export async function learningReplayPage(context,page=0,size=10,options={}){
  return selectLearningReplays(await allLearningReplays(context),{...options,page,size});
 }
