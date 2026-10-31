@@ -2,13 +2,21 @@ import {Game} from './engine.mjs';
 import {ACTIONS,cloneGame} from './simulation.mjs';
 
 const dirs=ACTIONS.slice(0,4);
+// An optimistic upper bound, not a reachability claim. Amoebas and magic walls
+// can create more diamonds, so do not prune those worlds with this bound.
+export function diamondPotential(g){
+ let total=g.collected;
+ for(const row of g.grid)for(const t of row){if(t==='a'||t==='M')return Infinity;if(t==='*'||t==='d')total++;if(t==='b')total+=9;}
+ return total;
+}
 function stateHash(text){let a=2166136261,b=5381;for(let n=0;n<text.length;n++){a=Math.imul(a^text.charCodeAt(n),16777619);b=Math.imul(b,33)^text.charCodeAt(n);}return (a>>>0).toString(36)+(b>>>0).toString(36);}
 const distanceCache=new Map();
 function goalDistances(g){
  const exit=g.collected>=g.target,key=+exit+':'+g.grid.map(r=>r.join('')).join('');
  if(distanceCache.has(key))return distanceCache.get(key);
  const width=g.grid[0].length,height=g.grid.length,d=new Float64Array(width*height).fill(Infinity),queue=[];
- for(let y=0;y<height;y++)for(let x=0;x<width;x++)if(g.tile(x,y)===(exit?'X':'*')){d[y*width+x]=0;queue.push([x,y]);}
+ const goal=exit?'X':g.grid.some(r=>r.includes('*'))?'*':'b';
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++)if(g.tile(x,y)===goal){d[y*width+x]=0;queue.push([x,y]);}
  for(let i=0;i<queue.length;i++){
   const [x,y]=queue[i];
   for(const [dx,dy]of dirs){const xx=x+dx,yy=y+dy,t=g.tile(xx,yy),k=yy*width+xx;if(xx<0||yy<0||xx>=width||yy>=height||['#','+','M','a'].includes(t))continue;const value=d[y*width+x]+(t==='O'?4:1);if(value<d[k]){d[k]=value;queue.push([xx,yy]);}}
@@ -44,8 +52,8 @@ function paths(g){
  for(let i=0;i<q.length;i++){
   const p=q[i],tile=g.tile(p.x,p.y);
   if(p.path.length){
-   const priority=tile==='X'&&g.collected>=g.target?100000:tile==='*'?10000:tile==='.'&&critical.has(`${p.x},${p.y}`)?6000:tile==='.'&&['O','*'].includes(g.tile(p.x,p.y-1))?1000:0;
-   if(priority)goals.push({path:p.path,value:priority-p.path.length-(priority===1000?distance(p)*20:0),snap:tile!=='X'});
+   const priority=tile==='X'&&g.collected>=g.target?100000:tile==='*'?10000:tile==='.'&&critical.has(`${p.x},${p.y}`)?6000:tile==='.'&&['O','*'].includes(g.tile(p.x,p.y-1))?1000:tile==='.'&&distance(p)<7?700-distance(p)*60:0;
+   if(priority)goals.push({path:p.path,value:priority-p.path.length-(priority===1000?distance(p)*20:0),snap:tile!=='X',support:tile==='.'&&['O','*'].includes(g.tile(p.x,p.y-1))});
   }
   for(const dx of [-1,1])if(g.tile(p.x+dx,p.y)==='O'&&g.tile(p.x+dx*2,p.y)===' ')
    pushes.push({path:[...p.path,...Array.from({length:8},()=>[dx,0,false])],value:500-p.path.length-distance(p)*20});
@@ -56,15 +64,19 @@ function paths(g){
   }
  }
  goals.sort((a,b)=>b.value-a.value);
- return [...goals.slice(0,24).flatMap(g=>g.snap?[g.path,[...g.path.slice(0,-1),[g.path.at(-1)[0],g.path.at(-1)[1],true]]]:[g.path]),...pushes.sort((a,b)=>b.value-a.value).slice(0,8).flatMap(p=>[p.path,[...p.path,...Array.from({length:8},()=>[-p.path.at(-1)[0],0,false])]])];
+ return [...goals.slice(0,24).flatMap(g=>{
+  const snap=[...g.path.slice(0,-1),[g.path.at(-1)[0],g.path.at(-1)[1],true]];
+  const retreat=g.path.slice(0,-1).slice(-4).reverse().map(([dx,dy])=>[-dx,-dy,false]);
+  return [...(g.snap?[g.path,snap]:[g.path]),...(g.support?[[...snap,...retreat,...Array.from({length:8},()=>[0,0,false])]]:[])];
+ }),...pushes.sort((a,b)=>b.value-a.value).slice(0,8).flatMap(p=>[p.path,[...p.path,...Array.from({length:8},()=>[-p.path.at(-1)[0],0,false])]])];
 }
 function trace(node){const chunks=[];for(let n=node;n;n=n.parent)chunks.push(n.actions);return chunks.reverse().flat();}
 function mobility(g){let n=0;for(const [dx,dy]of dirs)if([' ','.','*','X'].includes(g.tile(g.player.x+dx,g.player.y+dy)))n++;return n;}
 function priority(g,length){
- let available=0;for(const row of g.grid)for(const t of row)if(t==='*')available++;
+ let available=0;for(const row of g.grid)for(const t of row)if(t==='*'||t==='d')available++;
  const distance=Math.min(100,goalDistances(g)[g.player.y*g.grid[0].length+g.player.x]);
  let preparation=0;for(const cell of corridorTargets(g)){const [x,y]=cell.split(',').map(Number);preparation=Math.max(preparation,Math.max(0,3-Math.abs(x-g.player.x)-Math.abs(y-g.player.y))*60);}
- return Math.min(g.collected,g.target)*2000+Math.min(available,g.target-g.collected)*30-length*2+mobility(g)*3-distance*12+preparation;
+ return Math.min(g.collected,g.target)*2000+Math.min(available,g.target-g.collected)*300-length*2+mobility(g)*3-distance*12+preparation;
 }
 function scout(context,pass,fixture,fastTrappedTimer){
  const g=new Game(context.index,'classic',fixture,{...context,fastTrappedTimer});g.start();const input=[],visits=new Map(),order=dirs.slice(pass).concat(dirs.slice(0,pass));
@@ -111,12 +123,12 @@ export function* planRoute(context,{seed=1,maxNodes=1800,maxTicks=1800,prefixes=
  const open=[root],seen=new Map([[planningKey(start),root.length]]);let best=root,expanded=0;
  const completed=new Map(visited);
  function add(g,parent,actions){
-  if(!actions.length||g.status==='dead'||(mobility(g)===0&&g.isTrapped()))return;
+  if(!actions.length||g.status==='dead'||diamondPotential(g)<g.target||(mobility(g)===0&&g.isTrapped()))return;
   const length=(parent?.length??0)+actions.length;if(length>maxTicks)return;
   const node={g,parent,actions,length,value:priority(g,length)};
   if(g.collected>best.g.collected||(g.collected===best.g.collected&&node.value>best.value))best=node;
   const key=planningKey(g),prior=seen.get(key);if(prior!==undefined&&prior<=length)return;
-  if((completed.get(stateHash(key))??Infinity)<=length)return;
+  if((completed.get('s2:'+stateHash(key))??Infinity)<=length)return;
   seen.set(key,length);open.push(node);
  }
  // Re-simulate saved inputs from birth; a past death is never resumed as alive.
@@ -140,7 +152,7 @@ export function* planRoute(context,{seed=1,maxNodes=1800,maxTicks=1800,prefixes=
   const breadthEvery=exploration>0?Math.round(1/Math.max(.05,Math.min(.8,exploration)))+1:Infinity;
   let pick=0;if(expanded%breadthEvery===breadthEvery-1){let shortest=Infinity;for(let i=0;i<open.length;i++)if(open[i].length<shortest){shortest=open[i].length;pick=i;}}
   const [node]=open.splice(pick,1),g=node.g;
-  const fingerprint=stateHash(planningKey(g));if((completed.get(fingerprint)??Infinity)<=node.length)continue;
+  const fingerprint='s2:'+stateHash(planningKey(g));if((completed.get(fingerprint)??Infinity)<=node.length)continue;
   completed.set(fingerprint,node.length);
   if(g.status==='won')return {game:g,input:trace(node),expanded,seed,finished:true};
   const routes=paths(g);

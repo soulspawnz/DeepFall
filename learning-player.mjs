@@ -128,7 +128,7 @@ export class LearningPlayer {
   const guide=(g,path)=>{const end=path.at(-1),id=path.length===1?`step:${ACTIONS.findIndex(a=>a[0]===end[0]&&a[1]===end[1]&&Boolean(a[2])===end[2])}`:`gem:${g.player.x+path.reduce((n,a)=>n+a[0],0)},${g.player.y+path.reduce((n,a)=>n+a[1],0)}`;return Math.tanh((this.values.get(`${signature(g,this.policyRevision)}/${id}`)?.mean??0)/500)*5;};
   const planned=yield* planRoute(this.context,{seed:learn?seed:1,maxNodes:searchNodes,prefixes,fixture,fastTrappedTimer,guide,visited:learn?this.searchVisited:[],exploration:learn?exploration:0});
   const game=planned.game,input=planned.input,status=game.status==='playing'?'budget':game.status;
-  const run={...this.context,status,diamonds:game.collected,target:game.target,ticks:input.length,score:game.score,remaining:game.remaining,reason:game.reason,route:inputFingerprint(input),seed,exploration:learn?exploration:0,fastTrappedTimer,input,plannerRevision:1,searchExpanded:planned.expanded,searchBudget:searchNodes,reusedPartials:memories.length};
+  const run={...this.context,status,diamonds:game.collected,target:game.target,ticks:input.length,score:game.score,remaining:game.remaining,reason:game.reason,route:inputFingerprint(input),seed,exploration:learn?exploration:0,fastTrappedTimer,input,plannerRevision:2,searchExpanded:planned.expanded,searchBudget:searchNodes,reusedPartials:memories.length};
   if(learn){
    this.attempts++;this.planningAttempts++;const {input:_,...summary}=run;this.results.push(summary);this.results=this.results.slice(-100);
    this.rememberPartials([run]);this.frontier=(planned.frontier??[]).filter(validInput).slice(0,64);this.searchVisited=planned.visited??this.searchVisited;

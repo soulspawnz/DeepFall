@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {LearningPlayer,contextKey} from '../learning-player.mjs';
 import {Game} from '../engine.mjs';
 import {verifyLearningReplay,learningReplay} from '../learning-archive.mjs';
+import {diamondPotential,planRoute} from '../route-planner.mjs';
 
 test('planning preserves prior learning, uses saved runs and reproduces a real original exit',()=>{
  const context={campaign:'original',index:0,difficulty:1},p=new LearningPlayer(context);
@@ -22,4 +23,27 @@ test('unfinished search branches and explored states survive serialization for a
  const saved=p.export(),restored=new LearningPlayer(context,JSON.parse(JSON.stringify(saved)));
  assert.deepEqual(restored.frontier,p.frontier);assert.deepEqual(restored.searchVisited,p.searchVisited);
  const next=restored.run({fixture,searchNodes:8});assert.equal(next.status,'budget');assert.equal(next.diamonds,1);assert.ok(next.reusedPartials>0);assert.equal(restored.attempts,2);
+});
+
+test('diamond supply counts future butterfly blasts and exempts regenerating worlds',()=>{
+ const grid=Array.from({length:22},()=>Array(40).fill('#'));
+ grid[3][2]=' ';grid[4][4]='b';grid[4][5]='*';grid[4][6]='d';
+ const g=new Game(0,'classic',{grid,player:{x:2,y:3},target:36,time:150});g.collected=25;
+ assert.equal(diamondPotential(g),36);
+ g.grid[4][5]=' ';g.grid[4][6]=' ';assert.equal(diamondPotential(g),34);
+ g.grid[4][6]='M';assert.equal(diamondPotential(g),Infinity);
+ g.grid[4][6]='a';assert.equal(diamondPotential(g),Infinity);
+});
+
+test('a butterfly blast that destroys a required loose diamond cannot seed the best partial',()=>{
+ const grid=Array.from({length:22},()=>Array(40).fill('#'));
+ for(let y=1;y<9;y++)for(let x=1;x<11;x++)grid[y][x]='.';
+ grid[3][5]=' ';grid[2][6]='O';grid[4][6]=' ';grid[5][6]='b';grid[4][5]='*';grid[7][9]='X';
+ const fixture={grid,player:{x:5,y:3},target:10,time:150,original:true,birth:0};
+ const context={campaign:'original',index:3,difficulty:1};
+ const doomed=[[1,0,true],[-1,0,false],[-1,0,false],...Array.from({length:6},()=>[0,0,false])];
+ const g=new Game(3,'classic',fixture,context);g.start();for(const [dx,dy,snap]of doomed)g.step({dx,dy,snap});
+ assert.equal(g.status,'playing');assert.equal(diamondPotential(g),9);
+ const planner=planRoute(context,{fixture,maxNodes:0,prefixes:[doomed]});let step;do{step=planner.next();}while(!step.done);
+ assert.ok(diamondPotential(step.value.game)>=10,'reject the doomed checkpoint even when supplied as a saved prefix');
 });
