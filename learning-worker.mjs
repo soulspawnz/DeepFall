@@ -6,7 +6,7 @@ async function consume(generator,phase,attempt){
  let step;
  do{
   step=generator.next();
-  if(!step.done&&step.value.decision%8===0){self.postMessage({type:'progress',phase,attempt,...step.value});await new Promise(resolve=>setTimeout(resolve,0));}
+  if(!step.done&&(step.value.frontier!==undefined||step.value.decision%8===0)){self.postMessage({type:'progress',phase,attempt,...step.value});await new Promise(resolve=>setTimeout(resolve,0));}
  }while(!step.done&&!cancelled);
  return step.done?step.value:null;
 }

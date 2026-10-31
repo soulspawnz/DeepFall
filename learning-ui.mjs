@@ -152,7 +152,7 @@ export function mountLearning({getContext,pause,onWatch}){
     try{
      if(data.type==='progress'){
       const label={baseline:'Measuring untrained player',evaluation:'Measuring learned player',recovery:'Verifying earlier replays'}[data.phase]??`Training attempt ${data.attempt}`;
-      status.textContent=`${label}: ${data.diamonds} diamonds, ${data.ticks} steps.`;return;
+      status.textContent=data.frontier!==undefined?`${label}: ${data.decision} search states · best ${data.diamonds} diamonds · ${data.frontier} open branches.`:`${label}: ${data.diamonds} diamonds, ${data.ticks} steps.`;return;
      }
      if(data.type==='record'||data.type==='recovered'){
       const records=data.type==='record'?[learningReplay(context,data.kind,data.attempt,data.run)]:data.records.map(r=>learningReplay(context,r.kind,r.attempt,r.run,true));
