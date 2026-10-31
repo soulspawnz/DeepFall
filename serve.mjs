@@ -2,6 +2,9 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 
 const files = new Map([
+  ['/live-replays.mjs',['live-replays.mjs','text/javascript; charset=utf-8']],
+  ['/playtests.css',['playtests.css','text/css; charset=utf-8']],
+  ...['A','B'].map(id=>[`/docs/live-${id}-won.png`,[`docs/live-${id}-won.png`,'image/png']]),
   ['/playtests.json',['docs/playtest-original.json','application/json; charset=utf-8']],
   ['/docs/playtest-original.json',['docs/playtest-original.json','application/json; charset=utf-8']],
   ['/fullscreen.css',['fullscreen.css','text/css; charset=utf-8']],

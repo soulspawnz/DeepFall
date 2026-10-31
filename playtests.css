@@ -1,0 +1,13 @@
+.playtest-library { margin:24px 0; padding:24px; border:1px solid #3d4933; background:#11180f; }
+.playtest-library[hidden] { display:none; }
+.playtest-library h3 { margin:0 0 12px; font-size:24px; }
+.playtest-library p { line-height:1.6; max-width:80ch; }
+.playtest-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr)); gap:16px; }
+.playtest-card { padding:16px; border:1px solid #38432f; min-width:0; }
+.playtest-card h4 { margin:0 0 10px; }
+.playtest-card img { width:100%; height:auto; display:block; }
+.playtest-card button { margin:8px 8px 0 0; padding:10px; }
+.playtest-library button { background:#222d1b; color:#d5e4b5; border:1px solid #53643d; padding:10px 14px; font:inherit; cursor:pointer; }
+.playtest-library button:hover { background:#354428; }
+.playtest-card a { color:#cce67e; }
+.playtest-library .replay-notice { color:#cce67e; }

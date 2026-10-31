@@ -3,6 +3,7 @@ import { Game, CAVES as EXPEDITION_CAVES, WIDTH, HEIGHT, STEP } from './engine.m
 import { ORIGINAL_CAVES, decodeOriginal, nextOriginal } from './original-caves.mjs';
 import { SIDAudio } from './audio.mjs';
 import { setupFullscreen } from './fullscreen.mjs';
+import {LiveRecording, loadLiveRuns, saveLiveRun, applyReplayAction} from './live-replays.mjs';
 
 const $ = id => document.getElementById(id);
 const canvas = $('game'), ctx = canvas.getContext('2d');
@@ -15,26 +16,77 @@ let sound = false;
 const sidAudio = new SIDAudio(updateAudio);
 const completed = new Set();
 let replay=null;
+let recording=null;
+const library=document.createElement('section');
+library.className='playtest-library';library.hidden=true;library.setAttribute('aria-label','Watch Playtests library');
+document.querySelector('.sid-panel')?.before(library);
+if(!library.isConnected)document.querySelector('main').append(library);
+const libraryMessage=document.createElement('p');libraryMessage.className='replay-notice';libraryMessage.setAttribute('role','status');
+function textElement(tag,text,parent){const e=document.createElement(tag);e.textContent=text;parent.append(e);return e;}
+function showLibrary(){
+ library.replaceChildren();textElement('h3','Watch Playtests',library);
+ textElement('p','Live wins are recorded automatically from the start of a fresh cave. Saved runs stay in this browser; export a recording to keep a separate copy. Pauses are omitted from playback. Rewinds are preserved.',library);
+ library.append(libraryMessage);
+ textElement('h4','Earlier live A / B results',library);
+ textElement('p','These two wins were observed live before input recording existed. Their screenshots and results are saved below. They are result records, not playable replays.',library);
+ const historical=document.createElement('div');historical.className='playtest-cards';library.append(historical);
+ for(const result of [
+  {id:'A',name:'Intro',diamonds:'12/12',score:236,time:'1:56',rewinds:2,note:'Exited the cave. Two Echo rewinds were used during the successful attempt. Earlier restarts are not included.'},
+  {id:'B',name:'Rooms',diamonds:'10/10',score:282,time:'1:22',rewinds:0,note:'Exited the cave without using a rewind. Snap-digging helped clear blocked corridors.'}
+ ]){
+  const card=document.createElement('article');card.className='playtest-card';historical.append(card);
+  textElement('h4',`Cave ${result.id} / ${result.name} — live win`,card);
+  textElement('p',`Original campaign · difficulty 1 · Echo. ${result.diamonds} diamonds · ${result.score} points · ${result.time} remaining · ${result.rewinds} rewinds used.`,card);
+  textElement('p',result.note,card);textElement('p','Replay unavailable: inputs were not recorded.',card);
+  const a=document.createElement('a');a.href=`./docs/live-${result.id}-won.png`;a.target='_blank';a.rel='noopener';
+  const img=document.createElement('img');img.src=a.href;img.alt=`Live Cave ${result.id} win screen`;img.loading='lazy';a.append(img);card.append(a);
+ }
+ textElement('p','C has not been cleared live. Best attempt so far: 19/24 diamonds, ended in death. A and B do not establish a full campaign completion.',library);
+ textElement('h4','Recorded live wins',library);
+ let runs=[];try{runs=loadLiveRuns(localStorage);}catch{}
+ if(!runs.length)textElement('p','No exact live-input recordings yet. Earlier screenshots are kept separately above.',library);
+ const saved=document.createElement('div');saved.className='playtest-cards';library.append(saved);
+ for(const run of runs){
+  const card=document.createElement('article');card.className='playtest-card';saved.append(card);
+  const name=run.campaign==='original'?ORIGINAL_CAVES[run.index].id:run.index+1;
+  textElement('h4',`Cave ${name} · difficulty ${run.difficulty} · ${run.mode}`,card);
+  textElement('p',`${run.result.diamonds} diamonds · ${run.result.score} points · ${run.result.rewindsUsed} rewinds used · ${run.recordedAt}`,card);
+  const watch=textElement('button','REPLAY LIVE WIN',card);watch.addEventListener('click',()=>{replay={attempts:[{...run,input:run.actions}],index:0,tick:0,delay:0,live:true};beginReplay();});
+  const download=textElement('button','EXPORT RECORDING',card);download.addEventListener('click',()=>{
+   const url=URL.createObjectURL(new Blob([JSON.stringify(run,null,2)],{type:'application/json'}));
+   const a=document.createElement('a');a.href=url;a.download=`deepfall-${run.campaign}-${run.index}-${run.difficulty}-live.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  });
+ }
+ textElement('h4','Automated test archive',library);
+ textElement('p','300 automated attempts: 26 wins, 258 deaths, 16 timeouts. These are separate from live play. Each replay shows its recorded outcome.',library);
+ const archive=textElement('button','WATCH AUTOMATED ARCHIVE',library);archive.addEventListener('click',startArchive);
+ const close=textElement('button','CLOSE LIBRARY',library);close.addEventListener('click',()=>{library.hidden=true;});
+}
 const replayButton=document.createElement('button');
 replayButton.id='watch-tests';replayButton.textContent='WATCH PLAYTESTS';
 replayButton.className='quiet';
 $('pause').parentElement.append(replayButton);
 replayButton.addEventListener('click',async()=>{
- if(replay){replay=null;replayButton.textContent='WATCH PLAYTESTS';game.pause();sync();return;}
+ if(replay){replay=null;replayButton.textContent='WATCH PLAYTESTS';libraryMessage.textContent='Playback stopped.';game.pause();sync();return;}
+ library.hidden=!library.hidden;
+ if(!library.hidden){if(game.status==='playing')game.pause();sync();showLibrary();}
+});
+async function startArchive(){
  replayButton.disabled=true;
  try {
   const response=await fetch(new URL('./docs/playtest-original.json',import.meta.url));if(!response.ok)throw new Error('Replay data unavailable');
   const report=await response.json();replay={attempts:report.attempts,index:0,tick:0,delay:0};
   beginReplay();
- }catch(error){replayButton.textContent=error.message;}finally{replayButton.disabled=false;}
-});
+ }catch(error){libraryMessage.textContent=error.message;}finally{replayButton.disabled=false;}
+}
 function beginReplay(){
  const attempt=replay.attempts[replay.index];
- campaign='original';difficulty=attempt.difficulty;mode='classic';
- $('campaign').value='original';$('difficulty').value=String(difficulty);$('difficulty').disabled=false;
+ campaign=attempt.campaign??'original';difficulty=attempt.difficulty;mode=attempt.mode??'classic';
+ $('campaign').value=campaign;$('difficulty').value=String(difficulty);$('difficulty').disabled=campaign!=='original';
  newGame(attempt.index,true);game.start();replay.tick=0;replay.delay=0;
- for(const item of ['echo','classic']){$(item+'-mode').classList.toggle('selected',item==='classic');$(item+'-mode').setAttribute('aria-pressed',String(item==='classic'));}
- replayButton.textContent=`STOP REPLAY ${replay.index+1}/300`;
+ for(const item of ['echo','classic']){$(item+'-mode').classList.toggle('selected',item===mode);$(item+'-mode').setAttribute('aria-pressed',String(item===mode));}
+ replayButton.textContent=`STOP REPLAY ${replay.index+1}/${replay.attempts.length}`;
+ libraryMessage.textContent=replay.live?'Playing an exact recorded live run, including rewind actions.':`Automated attempt ${replay.index+1}/${replay.attempts.length}. Recorded outcome: ${attempt.status}.`;
 }
 const caves = () => campaign==='original' ? ORIGINAL_CAVES : EXPEDITION_CAVES;
 const caveInfo = index => campaign==='original' ? decodeOriginal(index,difficulty) : EXPEDITION_CAVES[index];
@@ -57,12 +109,13 @@ function sounds() {
 function newGame(index = selected, keepReplay=false) {
   if(replay&&!keepReplay){replay=null;replayButton.textContent='WATCH PLAYTESTS';}
   selected = index; game = new Game(index, mode, null, {campaign,difficulty}); held = []; snap = false;
+  recording=keepReplay?null:new LiveRecording({campaign,index,difficulty,mode});
   viewWidth=game.bonus?20:WIDTH; viewHeight=game.bonus?12:HEIGHT;
   canvas.width=viewWidth*TILE; canvas.height=viewHeight*TILE;
   accumulator = 0; flash = 0;
-  sidAudio.configure({profile:campaign,music:campaign==='deepfall'});sidAudio.reset();
-  $('sid-music').disabled=campaign==='original';$('sid-music').textContent=campaign==='original'?'MUSIC OFF':'MUSIC ON';
-  $('sid-music').setAttribute('aria-pressed',String(campaign==='deepfall'));
+  sidAudio.configure({profile:campaign});sidAudio.reset();
+  $('sid-music').disabled=false;$('sid-music').textContent=sidAudio.settings.music?'MUSIC ON':'MUSIC OFF';
+  $('sid-music').setAttribute('aria-pressed',String(sidAudio.settings.music));
   if(!sound)$('sid-readout').textContent=campaign==='original'?'reSID EMULATION / PAL / ORIGINAL GAMEPLAY EFFECTS':'reSID EMULATION / PAL / DEEPFALL SCORE';
   updateCaves(); sync();
 }
@@ -142,13 +195,25 @@ function loop(now) {
     while (accumulator >= STEP && game.status === 'playing') {
       accumulator -= STEP;
       const direction = held.at(-1);
-      const [dx, dy] = replay ? replay.attempts[replay.index].input[replay.tick++]??[0,0] : directionKeys[direction] ?? directionNames[direction] ?? [0, 0];
-      game.step({ dx, dy, snap: snap || touchSnap }); sounds();
-      if (game.status === 'won') { completed.add(completionKey()); updateCaves(); }
+      const [dx, dy] = directionKeys[direction] ?? directionNames[direction] ?? [0, 0];
+      if(replay){
+       const action=replay.attempts[replay.index].input[replay.tick++];
+       if(!action){replay=null;replayButton.textContent='WATCH PLAYTESTS';game.pause();libraryMessage.textContent='Replay ended before a terminal result.';sync();break;}
+       applyReplayAction(game,action);
+      } else {const input={dx,dy,snap:snap||touchSnap};recording?.step(input);game.step(input);}
+      sounds();
+      if (game.status === 'won') {
+       completed.add(completionKey()); updateCaves();
+       const run=recording?.finish(game);recording=null;
+       if(run)try{saveLiveRun(localStorage,run);libraryMessage.textContent='Live win saved. Open Watch Playtests to replay or export it.';}catch{libraryMessage.textContent='The win could not be saved in browser storage.';}
+      }
       sync();
     }
   } else {
     accumulator = 0;
+    if(replay&&game.status==='dead'&&replay.attempts[replay.index].input[replay.tick]?.rewind){
+      applyReplayAction(game,replay.attempts[replay.index].input[replay.tick++]);sounds();sync();
+    }
     if(replay&&['dead','won'].includes(game.status)&&(replay.delay+=elapsed)>2){
       if(++replay.index<replay.attempts.length)beginReplay();
       else{replay=null;replayButton.textContent='WATCH PLAYTESTS';}
@@ -170,7 +235,7 @@ document.addEventListener('keydown', event => {
   else if (!event.repeat && event.code === 'Enter') { event.preventDefault(); if (game.status !== 'playing') play(); }
   else if (!event.repeat && event.code === 'KeyP') { game.pause(); sync(); }
   else if (!event.repeat && event.code === 'KeyR') { newGame(); play(); }
-  else if (!event.repeat && event.code === 'KeyZ') { if (game.rewind()) { sounds(); sync(); } }
+  else if (!event.repeat && event.code === 'KeyZ') { if (!replay && game.rewind()) { recording?.rewind();sounds(); sync(); } }
 });
 document.addEventListener('keyup', event => { held = held.filter(code => code !== event.code); if (event.code === 'Space') snap = false; });
 function unfocus() { held = []; snap = false; if (game.status === 'playing') game.pause(); sync(); }
@@ -180,7 +245,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) unfoc
 $('play').addEventListener('click', play);
 $('pause').addEventListener('click', () => { game.pause(); sync(); });
 $('restart').addEventListener('click', () => { newGame(); play(); });
-$('rewind').addEventListener('click', () => { if (game.rewind()) { sounds(); sync(); canvas.focus({ preventScroll: true }); } });
+$('rewind').addEventListener('click', () => { if (!replay && game.rewind()) { recording?.rewind();sounds(); sync(); canvas.focus({ preventScroll: true }); } });
 async function enableAudio() {
   $('sound').disabled = true;
   $('sid-state').textContent = 'STARTING SID';
@@ -220,10 +285,11 @@ $('sid-demo').addEventListener('click', async () => {
   sidAudio.demo();
 });
 $('sid-model').addEventListener('change', () => sidAudio.configure({ model: $('sid-model').value }));
-for (const name of ['music', 'effects']) $('sid-' + name).addEventListener('click', () => {
+for (const name of ['music', 'effects']) $('sid-' + name).addEventListener('click', async () => {
   const enabled = !sidAudio.settings[name]; sidAudio.configure({ [name]: enabled });
   $('sid-' + name).setAttribute('aria-pressed', String(enabled));
   $('sid-' + name).textContent = `${name.toUpperCase()} ${enabled ? 'ON' : 'OFF'}`;
+  if(enabled&&!sound)await enableAudio();
 });
 $('sid-volume').addEventListener('input', () => sidAudio.configure({ master: Number($('sid-volume').value) / 100 * .6 }));
 $('campaign').addEventListener('change',()=>{

@@ -68,7 +68,11 @@ The game and SID tests include exact sample accounting at 44.1/48/96 kHz, both c
 
 ## Recorded play tests
 
-All 100 original stage/difficulty variants received three input-driven automated attempts: 300 total, 26 wins and 274 deaths/time-outs, with zero engine exceptions. These are goal-seeking attempts, not proof of completion of every cave. `docs/playtest-original.json` retains every input and outcome; the CSV gives a compact table. Click **WATCH PLAYTESTS** to replay them at normal speed in the game; click again to stop. Manual cave/restart controls stop the replay. Sound remains opt-in. The first replay is a complete Cave A/1 win.
+All 100 original stage/difficulty variants received three input-driven automated attempts: 300 total, 26 wins and 274 deaths/time-outs, with zero engine exceptions. These are goal-seeking attempts, not proof of completion of every cave. `docs/playtest-original.json` retains every input and outcome; the CSV gives a compact table. Open **WATCH PLAYTESTS**, then **WATCH AUTOMATED ARCHIVE** to replay those attempts at normal speed. The main button stops playback. Manual cave/restart controls also stop the replay. Sound remains opt-in. The first archive replay is a complete Cave A/1 win.
+
+The library separately preserves the earlier live A/1 and B/1 wins as screenshots and result notes: A finished with 12/12 diamonds, 236 points, 1:56 remaining and two Echo rewinds; B finished with 10/10 diamonds, 282 points, 1:22 remaining and no rewinds. Input recording did not exist during those runs, so they are explicitly marked as results only, without playable replays. C has not been cleared live; the best finished attempt reached 19/24 before death.
+
+Fresh cave attempts now record the inputs actually consumed by the engine, including idle steps, snap-digging and rewind actions. Successful runs are saved in this browser's local storage (latest ten), appear under **Recorded live wins**, and can be replayed or exported as JSON. Pauses are omitted. Clearing browser storage removes these saved recordings; exported files are separate copies. Recordings stay local and are not uploaded. `test/live-replays.test.mjs` verifies exact winning-state reproduction with snap and rewind, persistence validation, and rejection of unsuccessful attempts.
 
 `tools/playtest-original.mjs` regenerates the attempts; `test/playtest-replays.test.mjs` verifies all 300 reproduce their recorded results. `skills/browser-validation/SKILL.md` records the reusable browser-check workflow.
 

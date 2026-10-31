@@ -5,7 +5,10 @@ const browser=await chromium.launch({headless:true,executablePath:process.argv[3
 try{
  const page=await browser.newPage({viewport:{width:1440,height:1200}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.clock.install();await page.goto('http://127.0.0.1:8767/',{waitUntil:'networkidle'});
- await page.locator('#watch-tests').click();await page.waitForFunction(()=>document.querySelector('#watch-tests').textContent.includes('1/300'));
+ await page.locator('#watch-tests').click();
+ assert.ok(await page.getByText('Replay unavailable: inputs were not recorded.',{exact:true}).count()===2);
+ for(const image of await page.locator('.playtest-card img').all())assert.ok(await image.evaluate(e=>e.complete&&e.naturalWidth>0));
+ await page.getByRole('button',{name:'WATCH AUTOMATED ARCHIVE',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#watch-tests').textContent.includes('1/300'));
  await page.clock.runFor(10000);
  await page.screenshot({path:process.argv[4]+'/original-live-replay.png',fullPage:true});
  await page.clock.runFor(12000);
