@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111514">
+  <title>DEEPFALL — One more diamond.</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="audio.css">
+  <link rel="stylesheet" href="campaign.css">
+  <link rel="stylesheet" href="fullscreen.css">
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="./"><span class="brand-mark">◆</span> SUBTERRA<span class="brand-small">SOFTWORKS</span></a><span class="edition">FIELD EXPERIMENT Nº 001 <i></i> PLAYABLE BUILD</span><button id="sound" class="quiet" aria-pressed="false">SOUND OFF ↗</button></header>
+  <main>
+    <section class="intro"><div><p class="eyebrow">A LOVE LETTER TO THE UNDERGROUND · EST. 1984 / REIMAGINED</p><h1>DEEP<span>FALL</span><sup>01</sup></h1><p class="tagline">One more diamond. One wrong move.</p></div><p class="intro-note">Dig deep. Think ahead.<br>The mountain remembers<br>every move you make.</p></section>
+    <section class="play-layout">
+      <div class="cabinet">
+        <div class="instrument"><div><small>CAVE <span id="cave-number">01 / 03</span></small><strong id="cave-name">FIRST LIGHT</strong></div><div class="readout gems"><small>DIAMONDS</small><strong><span id="diamonds">00</span><span class="dim"> / </span><span id="target">12</span></strong></div><div class="readout"><small>TIME LEFT</small><strong id="timer">02:30</strong></div><div class="readout score"><small>SCORE</small><strong id="score">000000</strong></div></div>
+        <div class="screen-wrap">
+          <canvas id="game" width="640" height="352" tabindex="0" aria-label="Deepfall cave. Arrow keys or WASD to dig and move. Hold Space with a direction to dig without moving."></canvas>
+          <div class="scanlines" aria-hidden="true"></div>
+          <div id="overlay" class="overlay"><div class="overlay-inner"><span class="eyebrow" id="overlay-label">40 METRES BELOW THE SURFACE</span><h2 id="overlay-title">Trust your instincts.<br>Watch the ceiling.</h2><p id="overlay-copy">Collect 12 diamonds. Find the exit. Make it out.</p><button id="play" class="primary">ENTER THE CAVE <span>↵</span></button><small id="overlay-hint">ARROWS / WASD TO MOVE</small></div></div>
+        </div>
+        <div class="console"><span><i class="status-light"></i><span id="status-text" role="status" aria-live="polite">STANDING BY</span></span><div><button id="pause" class="quiet" title="Pause (P)">Ⅱ PAUSE</button><button id="restart" class="quiet" title="Restart (R)">↻ RESTART</button><button id="rewind" class="quiet" title="Rewind two seconds (Z)">↶ ECHO <span id="charges">3</span></button></div></div>
+      </div>
+      <aside>
+        <div class="side-label">THE EXPEDITION <span>↓</span></div>
+        <div class="campaign-controls"><label>CAMPAIGN<select id="campaign"><option value="original">Boulder Dash I · 1984</option><option value="deepfall">Deepfall · First expedition</option></select></label><label>DIFFICULTY<select id="difficulty"><option value="1">1 · Beginner</option><option value="2">2 · Intermediate</option><option value="3">3 · Advanced</option><option value="4">4 · Expert</option><option value="5">5 · Master</option></select></label></div>
+        <div id="caves" class="cave-list"></div>
+        <div class="mode-panel"><p class="side-label">CHOOSE YOUR INSTINCT</p><div class="mode-toggle" aria-label="Game mode"><button id="echo-mode" aria-pressed="false">ECHO</button><button id="classic-mode" class="selected" aria-pressed="true">CLASSIC</button></div><p id="mode-description">Just you and the mountain. No rewinds, no warnings. Every move has weight.</p></div>
+        <div class="field-note"><span class="diamond">✦</span><p>“The best way out<br>is always through.”</p><small>FIELD NOTE 001 / THE DESCENT</small></div>
+      </aside>
+    </section>
+    <div class="touch-controls" aria-label="Touch controls"><div class="dpad"><button data-dir="up" aria-label="Move up">↑</button><button data-dir="left" aria-label="Move left">←</button><button data-dir="down" aria-label="Move down">↓</button><button data-dir="right" aria-label="Move right">→</button></div><button id="snap-touch" aria-pressed="false">SNAP DIG</button></div>
+    <section class="sid-panel" aria-label="SID audio controls">
+      <div class="sid-heading"><span class="eyebrow">THE SOUND OF SILICON</span><strong>SID / THREE VOICES. ONE CHIP.</strong><small id="sid-state" role="status">AUDIO OFF / CLICK SOUND TO START</small></div>
+      <div class="sid-controls"><label>CHIP <select id="sid-model"><option value="6581">MOS 6581</option><option value="8580">MOS 8580</option></select></label><button id="sid-music" aria-pressed="true">MUSIC ON</button><button id="sid-effects" aria-pressed="true">EFFECTS ON</button><label>VOLUME <input id="sid-volume" aria-label="SID volume" type="range" min="0" max="100" value="58"></label><button id="sid-demo">SID SOUND CHECK</button></div>
+      <div class="sid-telemetry"><meter id="sid-meter" min="0" max="1" value="0" aria-label="SID output level"></meter><span id="sid-readout">reSID EMULATION / 50 Hz TRACKER / ORIGINAL SCORE</span><a href="./vendor/jssid/LICENSE.md" target="_blank" rel="noopener">CREDITS / LICENSE</a></div>
+    </section>
+    <section class="guide"><div class="guide-title"><span class="eyebrow">BEFORE YOU DESCEND</span><h3>Simple rules.<br>Heavy consequences.</h3></div><div class="guide-card"><span class="rule-number">01</span><h4>Make your own path</h4><p>Move with <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> or WASD. Hold <kbd>SPACE</kbd> and a direction to dig without stepping.</p></div><div class="guide-card"><span class="rule-number">02</span><h4>Respect the weight</h4><p>Rocks fall. Rounded surfaces make them roll. Push sideways when there’s room. Never linger underneath.</p></div><div class="guide-card"><span class="rule-number">03</span><h4>Know when to leave</h4><p>Meet the diamond quota to open the exit. Extra gems mean extra points. <kbd>P</kbd> pauses. <kbd>R</kbd> starts fresh.</p></div></section>
+  </main>
+  <footer><span>BUILT FOR THE JOY OF ONE MORE TRY.</span><span>ORIGINAL CAVES · C64-INSPIRED · NO QUARTERS REQUIRED</span><span>SUBTERRA / 2026</span></footer>
+  <script type="module" src="main.mjs"></script>
+</body>
+</html>

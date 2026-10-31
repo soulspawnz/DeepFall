@@ -1,0 +1,26 @@
+{
+  "repository": "https://github.com/jakesgordon/javascript-boulderdash",
+  "revision": "61f0bb59785878669a28796c471845bb9a91402e",
+  "files": [
+    {
+      "file": "README.md",
+      "source": "https://raw.githubusercontent.com/jakesgordon/javascript-boulderdash/61f0bb59785878669a28796c471845bb9a91402e/README.md",
+      "sha256": "471005d96a42159ade46e12eedd0e743d04ade369c615527c9c3433b31cd8613"
+    },
+    {
+      "file": "boulderdash.js",
+      "source": "https://raw.githubusercontent.com/jakesgordon/javascript-boulderdash/61f0bb59785878669a28796c471845bb9a91402e/boulderdash.js",
+      "sha256": "86b051d5d7ab0b88ada7de782983c02cca9422525b8942d5f3ff3b33165c2149"
+    },
+    {
+      "file": "caves.js",
+      "source": "https://raw.githubusercontent.com/jakesgordon/javascript-boulderdash/61f0bb59785878669a28796c471845bb9a91402e/caves.js",
+      "sha256": "3edb93d166efcb415d80aeca2f9f500c3ceb022a30ef632af37efce8be4fa72a"
+    },
+    {
+      "file": "decoded_cave_data.pdf",
+      "source": "https://jakesgordon.com/writing/javascript-boulderdash/decoded_cave_data.pdf",
+      "sha256": "08ef98c543bc6c95371421db468547fc49e045f1558ea6ae7f1ec68fb061d568"
+    }
+  ]
+}

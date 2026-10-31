@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import { pathToFileURL } from 'node:url';
+const { chromium } = await import(pathToFileURL(process.argv[2]).href);
+const browser = await chromium.launch({ headless: true, executablePath: process.argv[3] });
+try {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1200 } });
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('http://127.0.0.1:8767/', { waitUntil: 'networkidle' });
+  await page.locator('#campaign').selectOption('deepfall');
+  await page.locator('#sound').click();
+  await page.waitForFunction(() => document.querySelector('#sound').getAttribute('aria-pressed') === 'true');
+  await page.waitForFunction(() => document.querySelector('#sid-meter').value > .001);
+  assert.match(await page.locator('#sid-state').innerText(), /6581/);
+  await page.locator('#sid-demo').click();
+  await page.waitForFunction(() => document.querySelector('#sid-readout').innerText.includes('LAST: WIN'), {timeout:15000});
+  assert.match(await page.locator('#sid-readout').innerText(), /9 FX/);
+  await page.locator('#sid-model').selectOption('8580');
+  await page.waitForFunction(() => document.querySelector('#sid-state').innerText.includes('8580'));
+  await page.locator('#sid-music').click();
+  assert.equal(await page.locator('#sid-music').getAttribute('aria-pressed'), 'false');
+  await page.locator('#play').click();
+  await page.keyboard.down('ArrowRight'); await page.waitForTimeout(500); await page.keyboard.up('ArrowRight');
+  await page.waitForFunction(() => /LAST: (GEM|DIG)/.test(document.querySelector('#sid-readout').innerText));
+  await page.keyboard.press('KeyP');
+  await page.waitForFunction(() => document.querySelector('#sid-meter').value === 0);
+  await page.locator('#sound').click();
+  assert.equal(await page.locator('#sound').getAttribute('aria-pressed'), 'false');
+  await page.locator('#sound').click();
+  await page.waitForFunction(() => document.querySelector('#sound').getAttribute('aria-pressed') === 'true');
+  await page.keyboard.press('KeyP');
+  await page.locator('#sid-music').click();
+  await page.waitForFunction(() => document.querySelector('#sid-meter').value > .001);
+  assert.deepEqual(errors, []);
+  await page.screenshot({ path: process.argv[4], fullPage: true });
+  console.log('[OK] Real AudioWorklet: both chips, nonzero PCM, nine effects, gameplay events, music mute, pause silence, and audio restart.');
+} finally { await browser.close(); }

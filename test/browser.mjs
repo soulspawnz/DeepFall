@@ -1,0 +1,50 @@
+import assert from 'node:assert/strict';
+import { pathToFileURL } from 'node:url';
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
+
+// Supply an existing playwright-core entry point; no package installation needed.
+const { chromium } = await import(pathToFileURL(process.argv[2]).href);
+const output = process.argv[3];
+await mkdir(output, { recursive: true });
+const browser = await chromium.launch({ headless: true, ...(process.argv[4] ? { executablePath: process.argv[4] } : {}) });
+try {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1080 }, deviceScaleFactor: 1 });
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('http://127.0.0.1:8767/', { waitUntil: 'networkidle' });
+  await page.locator('#campaign').selectOption('deepfall');
+  await page.locator('#echo-mode').click();
+  await page.screenshot({ path: path.join(output, 'deepfall-desktop.png'), fullPage: true });
+  await page.getByRole('button', { name: 'ENTER THE CAVE' }).click();
+  assert.equal(await page.locator('#overlay').isVisible(), false);
+  await page.keyboard.down('ArrowRight'); await page.waitForTimeout(400); await page.keyboard.up('ArrowRight');
+  assert(Number(await page.locator('#diamonds').innerText()) > 0);
+  await page.keyboard.press('KeyP'); assert.equal(await page.locator('#overlay').isVisible(), true);
+  const before = await page.locator('#timer').innerText(); await page.waitForTimeout(300);
+  assert.equal(await page.locator('#timer').innerText(), before);
+  await page.keyboard.press('KeyP');
+  await page.keyboard.press('KeyZ'); assert.equal(await page.locator('#charges').innerText(), '2');
+  await page.screenshot({ path: path.join(output, 'deepfall-playing.png'), fullPage: true });
+  await page.locator('#classic-mode').click();
+  assert.equal(await page.locator('#rewind').isDisabled(), true);
+  await page.locator('.cave-button').nth(2).click(); assert.equal(await page.locator('#target').innerText(), '24');
+  await page.locator('#sound').click();
+  await page.waitForFunction(() => document.querySelector('#sound').getAttribute('aria-pressed') === 'true');
+  await page.locator('#sound').click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: path.join(output, 'deepfall-mobile.png'), fullPage: true });
+  assert.equal(await page.locator('.touch-controls').isVisible(), true);
+  assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  const screenBounds = await page.locator('.screen-wrap').boundingBox();
+  const overlayBounds = await page.locator('.overlay-inner').boundingBox();
+  assert(overlayBounds.y >= screenBounds.y && overlayBounds.y + overlayBounds.height <= screenBounds.y + screenBounds.height);
+  await page.locator('#play').click();
+  await page.locator('[data-dir="right"]').hover();
+  await page.mouse.down();
+  await page.waitForTimeout(300);
+  await page.mouse.up();
+  assert(Number(await page.locator('#diamonds').innerText()) > 0);
+  assert.deepEqual(errors, []);
+  console.log('[OK] Desktop and mobile browser checks passed; no page errors.');
+} finally { await browser.close(); }

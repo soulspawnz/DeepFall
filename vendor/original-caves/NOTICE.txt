@@ -1,0 +1,6 @@
+Cave decoder reference: Jake Gordon, Javascript BoulderDash (2011), MIT license as declared in upstream README.md.
+Cave-data research and C decoder: Jeff Bevis and Peter Broadribb.
+Original Boulder Dash cave designs: Peter Liepa with Chris Gray, First Star Software (1984).
+The upstream decoder license is not a claim of new ownership or licensing of the original game designs.
+Reference source retained for reproducible golden verification; not executed by the game.
+See docs/original-caves.json and original-primary-verification.json for provenance.

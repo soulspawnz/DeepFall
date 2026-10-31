@@ -1,0 +1,36 @@
+{
+  "repository": "https://github.com/jhohertz/jsSID",
+  "revision": "15c861537a6aefdfd242a2692380a537f4c8e66a",
+  "files": [
+    {
+      "file": "jssid.core.js",
+      "source": "https://raw.githubusercontent.com/jhohertz/jsSID/15c861537a6aefdfd242a2692380a537f4c8e66a/js/jssid.core.js",
+      "bytes": 1539,
+      "sha256": "5e520c03f774abde29d8b82e6d220342be631739cb1fccb568c25de569637d32"
+    },
+    {
+      "file": "jssid.resid.js",
+      "source": "https://raw.githubusercontent.com/jhohertz/jsSID/15c861537a6aefdfd242a2692380a537f4c8e66a/js/jssid.resid.js",
+      "bytes": 48189,
+      "sha256": "b378d3b46b78337153bff0eb6b0b93486d54e3ca75c6db06d4c7c300ff93226e"
+    },
+    {
+      "file": "jsxcompressor.js",
+      "source": "https://raw.githubusercontent.com/jhohertz/jsSID/15c861537a6aefdfd242a2692380a537f4c8e66a/js/jsxcompressor.js",
+      "bytes": 32919,
+      "sha256": "e18077109df09f1e00b655863531e298f6477f84a5478aae813b406b16eb5230"
+    },
+    {
+      "file": "LICENSE.md",
+      "source": "https://raw.githubusercontent.com/jhohertz/jsSID/15c861537a6aefdfd242a2692380a537f4c8e66a/LICENSE.md",
+      "bytes": 20270,
+      "sha256": "fd8ed7c48573db63d66e5e3e43241dc27b387ca8baa6e1a36d9e8c4c221969fa"
+    },
+    {
+      "file": "stream.js",
+      "source": "https://raw.githubusercontent.com/jhohertz/jsSID/15c861537a6aefdfd242a2692380a537f4c8e66a/js/stream.js",
+      "bytes": 3754,
+      "sha256": "a728a8794b927db5cbb4291b96fa8c4aeeb7433223e08e3ddf154daffd81270e"
+    }
+  ]
+}

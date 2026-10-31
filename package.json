@@ -1,0 +1,6 @@
+{
+  "name": "deepfall",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test test/engine.test.mjs test/sid.test.mjs test/original-caves.test.mjs test/original-mechanics.test.mjs test/original-sfx.test.mjs test/playtest-replays.test.mjs", "build:sid": "node tools/build-sid.mjs", "playtest:original":"node tools/playtest-original.mjs" }
+}

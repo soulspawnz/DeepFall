@@ -1,0 +1,20 @@
+[
+  {
+    "file": "sprites.png",
+    "source": "https://raw.githubusercontent.com/jakesgordon/javascript-boulderdash/61f0bb59785878669a28796c471845bb9a91402e/images/sprites.png",
+    "sha256": "befa6127d509fa9faf874eda3f34e799c713a87aa541baa3edf42653126f43fa",
+    "bytes": 7475
+  },
+  {
+    "file": "disassembly.html",
+    "source": "https://www.retrointernals.org/boulder-dash/boulder-dash-disassembly.html",
+    "sha256": "76aa7779e9b10cb4764a1de4e6e956f07a95cac9634b923a8b0caf4613d3a387",
+    "bytes": 351858
+  },
+  {
+    "file": "sounds.pdf",
+    "source": "https://jakesgordon.com/writing/javascript-boulderdash/sounds.pdf",
+    "sha256": "b1e9e24d13d16f3ebe629e2bf96b23efb740d64fdac162fffdef6663180e5aba",
+    "bytes": 161386
+  }
+]

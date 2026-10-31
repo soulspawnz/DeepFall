@@ -1,0 +1,76 @@
+{
+  "source": "https://www.retrointernals.org/boulder-dash/boulder-dash-disassembly.html",
+  "sha256": "76aa7779e9b10cb4764a1de4e6e956f07a95cac9634b923a8b0caf4613d3a387",
+  "ranges": [
+    {
+      "from": "7971",
+      "to": "7a85"
+    },
+    {
+      "from": "7aa1",
+      "to": "7ac1"
+    },
+    {
+      "from": "7cdf",
+      "to": "7cf3"
+    },
+    {
+      "from": "6e28",
+      "to": "6e64"
+    },
+    {
+      "from": "7080",
+      "to": "708b"
+    },
+    {
+      "from": "718a",
+      "to": "7190"
+    },
+    {
+      "from": "709d",
+      "to": "70c4"
+    },
+    {
+      "from": "6d91",
+      "to": "6dab"
+    }
+  ],
+  "tables": {
+    "boulder": [
+      50,
+      9,
+      7,
+      0,
+      129,
+      0,
+      240
+    ],
+    "diamond": [
+      120,
+      20,
+      7,
+      0,
+      17,
+      0,
+      240
+    ],
+    "explosion": [
+      50,
+      20,
+      15,
+      0,
+      129,
+      27,
+      0
+    ],
+    "crack": [
+      50,
+      47,
+      0,
+      0,
+      129,
+      25,
+      1
+    ]
+  }
+}

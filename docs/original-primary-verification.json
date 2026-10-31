@@ -1,0 +1,13 @@
+{
+  "source": "https://www.elmerproductions.com/sp/peterb/rawCaveData.html",
+  "sha256": "7b73e959a47cac18ecfe811cec91458af46ef9a1a651a97d8ac09e4288997d09",
+  "caves": 20,
+  "rawExactCaves": 19,
+  "payloadAllExact": true,
+  "notes": [
+    {
+      "cave": 19,
+      "normalization": "Restored omitted leading cave-number byte 0x13 from the Cave 19 heading. Payload bytes unchanged."
+    }
+  ]
+}
