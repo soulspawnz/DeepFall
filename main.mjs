@@ -4,6 +4,7 @@ import { ORIGINAL_CAVES, decodeOriginal, nextOriginal } from './original-caves.m
 import { SIDAudio } from './audio.mjs';
 import { setupFullscreen } from './fullscreen.mjs';
 import {LiveRecording, loadLiveRuns, saveLiveRun, applyReplayAction} from './live-replays.mjs';
+import {mountLearning} from './learning-ui.mjs';
 
 const $ = id => document.getElementById(id);
 const canvas = $('game'), ctx = canvas.getContext('2d');
@@ -17,6 +18,7 @@ const sidAudio = new SIDAudio(updateAudio);
 const completed = new Set();
 let replay=null;
 let recording=null;
+let learningUI=null;
 const library=document.createElement('section');
 library.className='playtest-library';library.hidden=true;library.setAttribute('aria-label','Watch Playtests library');
 document.querySelector('.sid-panel')?.before(library);
@@ -86,7 +88,7 @@ function beginReplay(){
  newGame(attempt.index,true);game.start();replay.tick=0;replay.delay=0;
  for(const item of ['echo','classic']){$(item+'-mode').classList.toggle('selected',item===mode);$(item+'-mode').setAttribute('aria-pressed',String(item===mode));}
  replayButton.textContent=`STOP REPLAY ${replay.index+1}/${replay.attempts.length}`;
- libraryMessage.textContent=replay.live?'Playing an exact recorded live run, including rewind actions.':`Automated attempt ${replay.index+1}/${replay.attempts.length}. Recorded outcome: ${attempt.status}.`;
+ libraryMessage.textContent=replay.live?'Playing an exact recorded live run, including rewind actions.':replay.learned?`AI replay after ${attempt.learningAttempts} training attempts. Recorded outcome: ${attempt.status}.`:`Automated attempt ${replay.index+1}/${replay.attempts.length}. Recorded outcome: ${attempt.status}.`;
 }
 const caves = () => campaign==='original' ? ORIGINAL_CAVES : EXPEDITION_CAVES;
 const caveInfo = index => campaign==='original' ? decodeOriginal(index,difficulty) : EXPEDITION_CAVES[index];
@@ -118,6 +120,7 @@ function newGame(index = selected, keepReplay=false) {
   $('sid-music').setAttribute('aria-pressed',String(sidAudio.settings.music));
   if(!sound)$('sid-readout').textContent=campaign==='original'?'reSID EMULATION / PAL / ORIGINAL GAMEPLAY EFFECTS':'reSID EMULATION / PAL / DEEPFALL SCORE';
   updateCaves(); sync();
+  learningUI?.refresh();
 }
 function advance() {
   if(campaign==='original') {
@@ -198,7 +201,7 @@ function loop(now) {
       const [dx, dy] = directionKeys[direction] ?? directionNames[direction] ?? [0, 0];
       if(replay){
        const action=replay.attempts[replay.index].input[replay.tick++];
-       if(!action){replay=null;replayButton.textContent='WATCH PLAYTESTS';game.pause();libraryMessage.textContent='Replay ended before a terminal result.';sync();break;}
+       if(!action){const limited=replay.learned&&replay.attempts[replay.index].status==='budget';replay=null;replayButton.textContent='WATCH PLAYTESTS';game.pause();libraryMessage.textContent=limited?'AI attempt reached its training limit.':'Replay ended before a terminal result.';sync();break;}
        applyReplayAction(game,action);
       } else {const input={dx,dy,snap:snap||touchSnap};recording?.step(input);game.step(input);}
       sounds();
@@ -320,4 +323,10 @@ $('snap-touch').addEventListener('click', () => {
   touchSnap = !touchSnap; $('snap-touch').setAttribute('aria-pressed', String(touchSnap));
   $('snap-touch').textContent = touchSnap ? 'SNAP DIG ON' : 'SNAP DIG';
 });
-setupFullscreen(); newGame(); requestAnimationFrame(loop);
+setupFullscreen(); newGame();
+learningUI=mountLearning({
+ getContext:()=>({campaign,index:selected,difficulty}),
+ pause:()=>{if(game.status==='playing'){game.pause();sync();}},
+ onWatch:attempt=>{replay={attempts:[attempt],index:0,tick:0,delay:0,learned:true};beginReplay();}
+});
+requestAnimationFrame(loop);

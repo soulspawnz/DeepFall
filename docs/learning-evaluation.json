@@ -1,0 +1,10 @@
+{
+  "version": "deepfall-experience-2",
+  "scope": "Original Cave A, difficulty 1; deterministic greedy evaluation before and after ten exploratory training attempts",
+  "untrained": {"status":"won","diamonds":14,"target":12,"steps":285,"score":269},
+  "trained": {"status":"won","diamonds":12,"target":12,"steps":164,"score":253},
+  "training": {"attempts":10,"wins":9,"distinctRoutes":8,"exploration":0.25},
+  "metric": "Steps to reach the exit, including birth and idle steps. Extra diamonds are not the optimization target.",
+  "checks": ["Training changes evaluated action selection", "Serialization preserves the learned policy", "Best saved input reaches a real exit using unchanged physics"],
+  "limits": "This establishes improvement on A/1, not completion or improvement on all caves. Further training may explore worse routes; the best known winning trace is retained."
+}

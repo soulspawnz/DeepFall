@@ -11,3 +11,10 @@
 .playtest-library button:hover { background:#354428; }
 .playtest-card a { color:#cce67e; }
 .playtest-library .replay-notice { color:#cce67e; }
+.learning-controls { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+.learning-controls label { display:flex; align-items:center; gap:8px; }
+.learning-controls select { background:#15200f; color:#d5e4b5; padding:9px; border:1px solid #53643d; font:inherit; }
+.learning-results { border-collapse:collapse; width:100%; max-width:700px; }
+.learning-results caption { text-align:left; padding:12px 0; }
+.learning-results th,.learning-results td { text-align:left; padding:8px; border-bottom:1px solid #38432f; }
+.learning-player button:disabled { opacity:.45; cursor:default; }

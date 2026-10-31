@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import {pathToFileURL} from 'node:url';
+const {chromium}=await import(pathToFileURL(process.argv[2]).href);
+const browser=await chromium.launch({headless:true,executablePath:process.argv[3]});
+try {
+ const page=await browser.newPage({viewport:{width:1440,height:1100}}),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('http://127.0.0.1:8767/',{waitUntil:'networkidle'});
+ await page.getByRole('button',{name:'TRAIN PLAYER',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('#learning-status').textContent.startsWith('Training finished.'),{timeout:120000});
+ const progress=await page.locator('#learning-progress').innerText();
+ assert.match(progress,/10 attempts learned/);assert.match(progress,/Before learning: escaped in 285 steps/);assert.match(progress,/Current learned policy: escaped in 164 steps/);
+ await page.getByRole('button',{name:'WATCH NEXT ATTEMPT',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('#learning-status').textContent.startsWith('Training finished.'),{timeout:120000});
+ assert.match(await page.locator('#learning-progress').innerText(),/^11 attempts learned/);
+ assert.match(await page.locator('#watch-tests').innerText(),/STOP REPLAY/);
+ await page.locator('#watch-tests').click();
+ await page.reload({waitUntil:'networkidle'});assert.match(await page.locator('#learning-progress').innerText(),/11 attempts learned/);
+ await page.clock.install();
+ await page.getByRole('button',{name:'WATCH BEST RUN',exact:true}).click();
+ await page.clock.runFor(22000);assert.equal(await page.locator('#status-text').innerText(),'BACK ABOVE GROUND');
+ assert.equal(await page.locator('#diamonds').innerText(),'12');
+ await page.getByRole('button',{name:'TRAIN PLAYER',exact:true}).click();await page.getByRole('button',{name:'STOP TRAINING',exact:true}).click();
+ assert.match(await page.locator('#learning-status').innerText(),/Stopped/);
+ assert.equal(await page.getByRole('button',{name:'STOP TRAINING',exact:true}).isDisabled(),true);
+ await page.getByRole('button',{name:'TRAIN PLAYER',exact:true}).click();
+ await page.locator('#caves button').nth(1).click();assert.match(await page.locator('#learning-progress').innerText(),/^0 attempts/);
+ assert.equal(await page.getByRole('button',{name:'STOP TRAINING',exact:true}).isDisabled(),true);
+ await page.locator('#caves button').nth(0).click();assert.match(await page.locator('#learning-progress').innerText(),/^11 attempts/);
+ await page.locator('#watch-tests').click();assert.match(await page.getByRole('region',{name:'Watch Playtests library'}).innerText(),/No exact live-input recordings yet/);
+ await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ await page.screenshot({path:process.argv[4]+'/learning-player-mobile.png',fullPage:true});
+ assert.deepEqual(errors,[]);console.log('[OK] Training improves A from 285 to 164 steps; persists, replays a real win, stops, separates cave memories and live recordings, and fits mobile.');
+} finally {await browser.close();}

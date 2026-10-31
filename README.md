@@ -76,6 +76,16 @@ Fresh cave attempts now record the inputs actually consumed by the engine, inclu
 
 `tools/playtest-original.mjs` regenerates the attempts; `test/playtest-replays.test.mjs` verifies all 300 reproduce their recorded results. `skills/browser-validation/SKILL.md` records the reusable browser-check workflow.
 
+## Learning player
+
+Select a cave and difficulty, then use **TRAIN PLAYER** to run 10–100 simulated attempts. **WATCH NEXT ATTEMPT** learns from one new exploratory attempt and plays it back; **WATCH BEST RUN** replays the shortest win found so far. Exploration controls how often the player tries alternatives. **STOP TRAINING** preserves completed attempts. Changing the selected cave stops its current training batch and loads that cave's separate memory.
+
+This player uses the unchanged game engine to simulate candidate routes and short escape turns. Monte Carlo action values learn from the eventual outcome of each attempt, including deaths or failed escapes after meeting the quota. Those values, recent outcomes, before/after evaluations and the best win persist in local browser storage per campaign/cave/difficulty. **EXPORT LEARNING** saves an independent JSON copy. It does not upload data or use a remote service.
+
+The panel distinguishes simulated training and AI playback from live keyboard recordings. Results show route variety, wins, step counts and an untrained/current-policy comparison. The best known win is retained while exploratory attempts can fail. An attempt limit is recorded separately from death or a real exit.
+
+Measured on original A/1 after ten training attempts: the evaluated policy improved from **285 to 164 steps**, with **9 training wins and 8 distinct routes**. Both evaluations reached the exit; the trained policy collects the required 12 rather than optimizing for extra diamonds. This is evidence for A/1, not proof that every cave is solved. `docs/learning-evaluation.json` retains the result; `test/learning-player.test.mjs` reproduces it and verifies save/reload and exact winning playback. `test/learning-browser.mjs` checks worker training, persistence, stopping, cave isolation, fresh AI attempts, replay separation and mobile layout.
+
 ## Fullscreen
 
 Click **FULLSCREEN 4:3** or press **F**. The game uses a centered 4:3 stage with black borders to preserve sprite proportions. HUD and controls remain available; **F**, **Esc**, or **EXIT FULLSCREEN** exits. Browsers without native fullscreen use a viewport-filling fallback. Touch controls remain available.
