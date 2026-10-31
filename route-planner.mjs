@@ -10,13 +10,31 @@ export function diamondPotential(g){
  return total;
 }
 function stateHash(text){let a=2166136261,b=5381;for(let n=0;n<text.length;n++){a=Math.imul(a^text.charCodeAt(n),16777619);b=Math.imul(b,33)^text.charCodeAt(n);}return (a>>>0).toString(36)+(b>>>0).toString(36);}
+// Setup destinations are proposals, never substitutes for physics checks.
+export function generationTargets(g){
+ const targets=new Map();
+ const add=(x,y,kind,value)=>{if(g.tile(x,y)!=='.')return;const key=`${x},${y}`;if((targets.get(key)?.value??0)<value)targets.set(key,{kind,value});};
+ for(let y=0;y<g.grid.length;y++)for(let x=0;x<g.grid[y].length;x++){
+  const tile=g.tile(x,y);
+  if(tile==='a'&&g.amoeba.dead!=='O')for(const [dx,dy]of dirs)add(x+dx,y+dy,'amoeba-access',1800);
+  if(tile!=='M'||g.magic.remaining<=0)continue;
+  // Output is one cell below the wall; a blocked outlet consumes the input
+  // without producing a diamond. Clear it before encouraging activation.
+  add(x,y+1,'magic-outlet',7000);
+  let yy=y-1;const dirt=[];
+  while(yy>=0&&['.',' '].includes(g.tile(x,yy))){if(g.tile(x,yy)==='.')dirt.push(yy);yy--;}
+  if(g.tile(x,yy)==='O')for(const dy of dirt)add(x,dy,'magic-feed',g.tile(x,y+1)===' '?6500:1200);
+ }
+ return targets;
+}
 const distanceCache=new Map();
 function goalDistances(g){
- const exit=g.collected>=g.target,key=+exit+':'+g.grid.map(r=>r.join('')).join('');
+ const exit=g.collected>=g.target,key=+exit+':'+(g.magic.remaining>0)+':'+g.grid.map(r=>r.join('')).join('');
  if(distanceCache.has(key))return distanceCache.get(key);
  const width=g.grid[0].length,height=g.grid.length,d=new Float64Array(width*height).fill(Infinity),queue=[];
  const goal=exit?'X':g.grid.some(r=>r.includes('*'))?'*':'b';
  for(let y=0;y<height;y++)for(let x=0;x<width;x++)if(g.tile(x,y)===goal){d[y*width+x]=0;queue.push([x,y]);}
+ if(!exit&&!queue.length)for(const cell of generationTargets(g).keys()){const [x,y]=cell.split(',').map(Number);d[y*width+x]=0;queue.push([x,y]);}
  for(let i=0;i<queue.length;i++){
   const [x,y]=queue[i];
   for(const [dx,dy]of dirs){const xx=x+dx,yy=y+dy,t=g.tile(xx,yy),k=yy*width+xx;if(xx<0||yy<0||xx>=width||yy>=height||['#','+','M','a'].includes(t))continue;const value=d[y*width+x]+(t==='O'?4:1);if(value<d[k]){d[k]=value;queue.push([xx,yy]);}}
@@ -26,7 +44,7 @@ function goalDistances(g){
 export function planningKey(g){
  const s=g.snapshot();delete s.remaining;delete s.tick;delete s.trappedFor;delete s.score;
  if(!g.grid.some(r=>r.includes('a')))s.amoeba={dead:null,slow:0};
- if(!s.magic.active)s.magic.remaining=0;
+ // An idle wall with activation time left differs from an expired wall.
  return JSON.stringify(s);
 }
 const criticalCache=new WeakMap();
@@ -47,13 +65,14 @@ function corridorTargets(g){
  criticalCache.set(g,critical);return critical;
 }
 function paths(g){
- const q=[{...g.player,path:[]}],seen=new Set([`${g.player.x},${g.player.y}`]),goals=[],pushes=[],critical=corridorTargets(g);
+ const q=[{...g.player,path:[]}],seen=new Set([`${g.player.x},${g.player.y}`]),goals=[],pushes=[],critical=corridorTargets(g),setups=generationTargets(g);
  const distances=goalDistances(g),distance=p=>Math.min(100,distances[p.y*g.grid[0].length+p.x]);
  for(let i=0;i<q.length;i++){
   const p=q[i],tile=g.tile(p.x,p.y);
   if(p.path.length){
-   const priority=tile==='X'&&g.collected>=g.target?100000:tile==='*'?10000:tile==='.'&&critical.has(`${p.x},${p.y}`)?6000:tile==='.'&&['O','*'].includes(g.tile(p.x,p.y-1))?1000:tile==='.'&&distance(p)<7?700-distance(p)*60:0;
-   if(priority)goals.push({path:p.path,value:priority-p.path.length-(priority===1000?distance(p)*20:0),snap:tile!=='X',support:tile==='.'&&['O','*'].includes(g.tile(p.x,p.y-1))});
+   const setup=setups.get(`${p.x},${p.y}`);
+   const priority=tile==='X'&&g.collected>=g.target?100000:tile==='*'?10000:setup?setup.value:tile==='.'&&critical.has(`${p.x},${p.y}`)?6000:tile==='.'&&['O','*'].includes(g.tile(p.x,p.y-1))?1000:tile==='.'&&distance(p)<7?700-distance(p)*60:0;
+   if(priority)goals.push({path:p.path,value:priority-p.path.length-(priority===1000?distance(p)*20:0),snap:tile!=='X',setup:setup?.kind,support:tile==='.'&&['O','*'].includes(g.tile(p.x,p.y-1))});
   }
   for(const dx of [-1,1])if(g.tile(p.x+dx,p.y)==='O'&&g.tile(p.x+dx*2,p.y)===' ')
    pushes.push({path:[...p.path,...Array.from({length:8},()=>[dx,0,false])],value:500-p.path.length-distance(p)*20});
@@ -67,7 +86,7 @@ function paths(g){
  return [...goals.slice(0,24).flatMap(g=>{
   const snap=[...g.path.slice(0,-1),[g.path.at(-1)[0],g.path.at(-1)[1],true]];
   const retreat=g.path.slice(0,-1).slice(-4).reverse().map(([dx,dy])=>[-dx,-dy,false]);
-  return [...(g.snap?[g.path,snap]:[g.path]),...(g.support?[[...snap,...retreat,...Array.from({length:8},()=>[0,0,false])]]:[])];
+  return [...(g.snap?[g.path,snap]:[g.path]),...(g.support||g.setup?[[...snap,...retreat,...Array.from({length:8},()=>[0,0,false])]]:[])];
  }),...pushes.sort((a,b)=>b.value-a.value).slice(0,8).flatMap(p=>[p.path,[...p.path,...Array.from({length:8},()=>[-p.path.at(-1)[0],0,false])]])];
 }
 function trace(node){const chunks=[];for(let n=node;n;n=n.parent)chunks.push(n.actions);return chunks.reverse().flat();}
@@ -76,7 +95,9 @@ function priority(g,length){
  let available=0;for(const row of g.grid)for(const t of row)if(t==='*'||t==='d')available++;
  const distance=Math.min(100,goalDistances(g)[g.player.y*g.grid[0].length+g.player.x]);
  let preparation=0;for(const cell of corridorTargets(g)){const [x,y]=cell.split(',').map(Number);preparation=Math.max(preparation,Math.max(0,3-Math.abs(x-g.player.x)-Math.abs(y-g.player.y))*60);}
- return Math.min(g.collected,g.target)*2000+Math.min(available,g.target-g.collected)*300-length*2+mobility(g)*3-distance*12+preparation;
+ for(const [cell,setup]of generationTargets(g)){const [x,y]=cell.split(',').map(Number);preparation=Math.max(preparation,Math.max(0,5-Math.abs(x-g.player.x)-Math.abs(y-g.player.y))*(setup.kind==='magic-outlet'?80:50));}
+ const pending=g.amoeba.dead==='*'?g.grid.reduce((n,r)=>n+r.filter(t=>t==='a').length,0):0;
+ return Math.min(g.collected,g.target)*2000+Math.min(available,g.target-g.collected)*300+Math.min(pending,g.target-g.collected)*250-length*2+mobility(g)*3-distance*12+preparation;
 }
 function scout(context,pass,fixture,fastTrappedTimer){
  const g=new Game(context.index,'classic',fixture,{...context,fastTrappedTimer});g.start();const input=[],visits=new Map(),order=dirs.slice(pass).concat(dirs.slice(0,pass));
@@ -128,7 +149,7 @@ export function* planRoute(context,{seed=1,maxNodes=1800,maxTicks=1800,prefixes=
   const node={g,parent,actions,length,value:priority(g,length)};
   if(g.collected>best.g.collected||(g.collected===best.g.collected&&node.value>best.value))best=node;
   const key=planningKey(g),prior=seen.get(key);if(prior!==undefined&&prior<=length)return;
-  if((completed.get('s2:'+stateHash(key))??Infinity)<=length)return;
+  if((completed.get('s3:'+stateHash(key))??Infinity)<=length)return;
   seen.set(key,length);open.push(node);
  }
  // Re-simulate saved inputs from birth; a past death is never resumed as alive.
@@ -152,12 +173,13 @@ export function* planRoute(context,{seed=1,maxNodes=1800,maxTicks=1800,prefixes=
   const breadthEvery=exploration>0?Math.round(1/Math.max(.05,Math.min(.8,exploration)))+1:Infinity;
   let pick=0;if(expanded%breadthEvery===breadthEvery-1){let shortest=Infinity;for(let i=0;i<open.length;i++)if(open[i].length<shortest){shortest=open[i].length;pick=i;}}
   const [node]=open.splice(pick,1),g=node.g;
-  const fingerprint='s2:'+stateHash(planningKey(g));if((completed.get(fingerprint)??Infinity)<=node.length)continue;
+  const fingerprint='s3:'+stateHash(planningKey(g));if((completed.get(fingerprint)??Infinity)<=node.length)continue;
   completed.set(fingerprint,node.length);
   if(g.status==='won')return {game:g,input:trace(node),expanded,seed,finished:true};
   const routes=paths(g);
   for(const a of ACTIONS)routes.push([[a[0],a[1],Boolean(a[2])]]);
   routes.push(Array.from({length:4},()=>[0,0,false]));
+  if(g.grid.some(r=>r.includes('a')))for(const ticks of [8,32])routes.push(Array.from({length:ticks},()=>[0,0,false]));
   // Rotate equal-priority alternatives deterministically between attempts.
   const offset=(seed+expanded)%4;
   const transitions=new Map(),branchChoices=new Map();

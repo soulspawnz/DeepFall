@@ -66,6 +66,21 @@ Arguments select exported files, an output prefix, maximum attempts, and search-
 
 The CLI currently uses the learning player's default fixed exploration value (25%); it does not run the UI's Auto controller. Use browser training when testing Auto behavior. Keep private exports and input traces outside tracked fixtures, verify added recordings through the engine, and compare previous archive IDs/contents after merging.
 
+## Offline solver experiments
+
+Two standalone comparison solvers are retained alongside the persistent planner. Importing either module does not start a job or write files. Their CLI requires an explicit output directory, validates cave/difficulty/search limits, and saves only independently replay-verified wins with exclusive creation (existing files are not overwritten). Cave indices are zero-based and follow campaign order, including intermissions.
+
+```sh
+node tools/solve-campaign.mjs 6 "<output-directory>" 1 300 1
+node tools/solve-macros.mjs 6 "<output-directory>" 500 30000 1
+```
+
+`solve-campaign.mjs` takes indices, output directory, seed count, tick limit, and difficulty. It uses a short-horizon beam policy. `solve-macros.mjs` takes indices, output directory, node limit, wall-clock limit in milliseconds, and difficulty. It searches longer goal routes. The exported `solve` and `solveMacro` functions do no file I/O; macro progress can be observed through an optional callback. Both share the regular simulation cloning and complete planner state keys.
+
+Offline output uses `deepfall-offline-solver-1`, with Boolean snap flags, search provenance, and final state metadata. It is not an AI replay archive or evidence of learned experience and is not automatically imported into browser memory. `test/winning-F.json` retains a verified legacy F/1 input trace; the original generator/seed were not recorded, which its provenance explicitly states. `test/offline-solvers.test.mjs` verifies that fixture, import safety, bounds, and output preservation.
+
+The learning player uses related amoeba-access, conversion-waiting, and magic-wall outlet/feed proposals, checked by normal physics. Focused tests are in `test/generation-planning.test.mjs`.
+
 ## Asset maintenance
 
 - `npm run build:sid` verifies pinned upstream hashes and regenerates the reSID module wrapper.

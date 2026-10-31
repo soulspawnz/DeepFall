@@ -63,7 +63,7 @@ The outlined endpoint can be ahead of the animated player. Search may rewind or 
 
 Auto starts at 25% and reviews progress every five completed training attempts, within a 10–60% range. It can favor reliable routes or broaden a stalled search. Evaluation runs do not count as training successes. **STOP TRAINING** keeps completed attempts; unfinished attempts are not saved as completed runs.
 
-The player combines a learned decision table with bounded physics search and retained partial routes. It is **not a neural network**, and it can plateau. Collecting the quota is not a win: it must reach the exit. See [how learning, planning, and evaluation work](docs/LEARNING.md).
+The player combines a learned decision table with bounded physics search and retained partial routes, including butterfly, amoeba, and magic-wall setup proposals. It is **not a neural network**, and it can plateau. Collecting the quota is not a win: it must reach the exit. See [how learning, planning, and evaluation work](docs/LEARNING.md).
 
 ## Replays and backups
 

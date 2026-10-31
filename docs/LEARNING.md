@@ -32,6 +32,8 @@ Planner revision 2 rejects branches whose optimistic remaining diamond supply is
 
 New expansion rules use a new explored-state fingerprint namespace. Old fingerprints remain within bounded memory but do not suppress the changed options. Existing learned values, attempt numbers, baseline results, and archived inputs stay compatible.
 
+Planner revision 3 adds generation setup proposals. It prioritizes clearing a blocked magic-wall outlet before releasing a rock above that wall, skips feed proposals once activation time is exhausted, and distinguishes an unused wall from an expired one in search keys. Around amoeba it considers access digs, retreat, and longer waits; a confirmed conversion into diamonds receives planning credit, while conversion into rocks does not. These are bounded search hints, not assumed diamonds: collection and escapes must occur in the engine. They do not guarantee containment or successful completion of the original G/H caves.
+
 A partial result is the best candidate found within the search budget. Different searches can return the same incumbent, producing identical diamond and step counts. More route variety or higher exploration does not by itself establish progress.
 
 ## Auto exploration
