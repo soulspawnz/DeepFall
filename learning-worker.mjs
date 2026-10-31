@@ -1,4 +1,4 @@
-import {LearningPlayer,recoverLearningReplays} from './learning-player.mjs';
+import {LearningPlayer,recoverLearningReplays,adaptiveExploration} from './learning-player.mjs';
 let cancelled=false,acknowledge=null,serial=0,waiting=0;
 const summary=run=>{const {input,...result}=run;return result;};
 function publish(data){return new Promise(resolve=>{waiting=++serial;acknowledge=resolve;self.postMessage({...data,id:waiting});});}
@@ -29,8 +29,14 @@ self.onmessage=async({data})=>{
    if(run&&!cancelled){player.baseline=summary(run);await publish({type:'record',kind:'baseline',attempt:0,run,saved:player.export()});}
   }
   for(let n=0;n<Math.min(100,Math.max(1,Number(data.count)||10))&&!cancelled;n++){
-   const run=await consume(player.attempt({exploration:Math.min(.8,Math.max(.05,Number(data.exploration)||.25))}),'training',player.attempts+1);
+   const automatic=data.explorationMode==='auto';
+   const choice=automatic?adaptiveExploration(player):{value:Math.min(.8,Math.max(.05,Number(data.exploration)||.25)),reason:'Fixed manual exploration.'};
+   if(automatic)player.autoExploration=choice;
+   self.postMessage({type:'exploration',mode:automatic?'auto':'manual',...choice,attempt:player.attempts+1});
+   const run=await consume(player.attempt({exploration:choice.value}),'training',player.attempts+1);
    if(!run||cancelled)break;
+   const metadata={explorationMode:automatic?'auto':'manual',explorationReason:choice.reason};Object.assign(run,metadata);Object.assign(player.results.at(-1),metadata);
+   if(automatic)player.autoExploration=adaptiveExploration(player);
    await publish({type:'record',kind:'training',attempt:player.attempts,run,saved:player.export(),watch:Boolean(data.watch)});
   }
   if(!cancelled){

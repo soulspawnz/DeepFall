@@ -13,6 +13,26 @@ function hash(text) {
 }
 export const inputFingerprint=input=>hash(JSON.stringify(input));
 export function contextKey(context){return `${context.campaign}:${context.difficulty}:${context.index}`;}
+export function adaptiveExploration(model){
+ const rows=(model.results??[]).filter(r=>(!r.kind||r.kind==='training')&&['won','dead','budget'].includes(r.status)),attempts=Math.max(0,Number(model.attempts)||0),old=model.autoExploration;
+ const valid=old&&Number.isFinite(old.value)&&old.value>=.1&&old.value<=.6&&Number.isInteger(old.adjustedAt)&&old.adjustedAt>=0&&old.adjustedAt<=attempts&&typeof old.reason==='string';
+ const value=valid?old.value:.25,adjustedAt=valid?old.adjustedAt:0;
+ if(rows.length<5)return {value:.25,adjustedAt:0,reason:'Building a baseline from the first five training attempts.'};
+ if(valid&&attempts-adjustedAt<5)return {value,adjustedAt,reason:old.reason};
+ const freshCount=valid?Math.min(10,attempts-adjustedAt):10,fresh=rows.slice(-freshCount),prior=rows.slice(-freshCount-10,-freshCount),recent=rows.slice(-10);
+ const rate=r=>r.filter(x=>x.status==='won').length/Math.max(1,r.length);
+ const progress=r=>Math.max(0,...r.map(x=>Math.min(x.diamonds,x.target)/Math.max(1,x.target)));
+ const speed=r=>{const wins=r.filter(x=>x.status==='won').map(x=>x.ticks).sort((a,b)=>a-b);return wins.length>=2?wins[Math.floor(wins.length/2)]:null;};
+ const faster=speed(fresh)!==null&&speed(prior)!==null&&speed(fresh)<speed(prior)*.95;
+ const improving=prior.length&&(rate(fresh)>rate(prior)+.1||progress(fresh)>progress(prior)+.05||faster);
+ let next=value,reason;
+ if(recent.length>=5&&rate(recent)>=.6){next-=.05;reason='Recent escapes are consistent; focus on reliable routes.';}
+ else if(improving){next-=.05;reason='New training progress; reinforce promising routes.';}
+ else if(rate(recent)===0){next+=.1;reason='No recent escapes; broaden the search.';}
+ else if(prior.length&&progress(fresh)<progress(prior)-.05){next+=.1;reason='Recent training progress fell back; try more alternatives.';}
+ else {next+=.05;reason='Progress has levelled off; explore more alternatives.';}
+ return {value:Math.round(Math.max(.1,Math.min(.6,next))*100)/100,adjustedAt:attempts,reason};
+}
 function signature(g,revision=1) {
  // Remaining time is deliberately excluded: experience transfers across waits.
  const s=g.snapshot();delete s.remaining;delete s.tick;delete s.trappedFor;
@@ -90,8 +110,10 @@ export class LearningPlayer {
   this.partials=valid&&Array.isArray(saved.partials)?saved.partials.filter(r=>validSummary(r)&&validInput(r.input)&&contextKey(r)===contextKey(this.context)).slice(0,8):[];
   this.frontier=valid&&Array.isArray(saved.frontier)?saved.frontier.filter(validInput).slice(0,64):[];
   this.searchVisited=valid&&Array.isArray(saved.searchVisited)?saved.searchVisited.filter(e=>Array.isArray(e)&&typeof e[0]==='string'&&e[0].length<=32&&Number.isInteger(e[1])&&e[1]>=0&&e[1]<=4000).slice(-6000):[];
+  const auto=valid?saved.autoExploration:null;
+  this.autoExploration=auto&&Number.isFinite(auto.value)&&auto.value>=.1&&auto.value<=.6&&Number.isInteger(auto.adjustedAt)&&auto.adjustedAt>=0&&auto.adjustedAt<=this.attempts&&typeof auto.reason==='string'&&auto.reason.length<=200?{value:auto.value,adjustedAt:auto.adjustedAt,reason:auto.reason}:null;
  }
- export() {return {version:LEARNING_VERSION,policyRevision:this.policyRevision,policyStartAttempt:this.policyStartAttempt,planningRevision:this.planningRevision,planningAttempts:this.planningAttempts,partials:this.partials,frontier:this.frontier,searchVisited:this.searchVisited,context:this.context,attempts:this.attempts,values:[...this.values],results:this.results,best:this.best,baseline:this.baseline,evaluation:this.evaluation};}
+ export() {return {version:LEARNING_VERSION,policyRevision:this.policyRevision,policyStartAttempt:this.policyStartAttempt,planningRevision:this.planningRevision,planningAttempts:this.planningAttempts,partials:this.partials,frontier:this.frontier,searchVisited:this.searchVisited,autoExploration:this.autoExploration,context:this.context,attempts:this.attempts,values:[...this.values],results:this.results,best:this.best,baseline:this.baseline,evaluation:this.evaluation};}
  upgrade(){this.planningRevision=1;}
  rememberPartials(runs){
   const sorted=[...this.partials,...runs].filter(r=>validSummary(r)&&validInput(r.input)&&contextKey(r)===contextKey(this.context));

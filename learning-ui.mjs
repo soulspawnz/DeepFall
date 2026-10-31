@@ -1,4 +1,4 @@
-import {LEARNING_VERSION,LearningPlayer,contextKey} from './learning-player.mjs';
+import {LEARNING_VERSION,LearningPlayer,contextKey,adaptiveExploration} from './learning-player.mjs';
 import {ORIGINAL_CAVES} from './original-caves.mjs';
 import {learningReplay,replayAttempt,readLearningModel,saveLearningRecords,selectLearningReplays,learningProgress,allLearningReplays,importLearningModel,importLearningReplays} from './learning-archive.mjs';
 
@@ -64,7 +64,8 @@ function mountLearningCharts(parent,watch){
   evaluations.forEach(r=>point(r,value(r),true));baselines.forEach(r=>point(r,value(r),false,true));
   const marker=shape('circle',{r:6,class:'chart-selected',visibility:'hidden'});
   function select(record){const index=visible.findIndex(r=>r.id===record.id);if(index<0)return;slider.value=String(index);selectedId=record.id;const r=record.run,v=metric==='winrate'&&record.kind==='training'?data.training.find(p=>p.record.id===record.id)?.rollingWinRate:value(record);
-   detail.textContent=`${record.kind==='baseline'?'Baseline':record.kind==='evaluation'?`Evaluation after ${record.attempt}`:`Attempt ${record.attempt}`} · ${outcome[r.status]} · ${r.diamonds}/${r.target} diamonds · ${r.ticks} steps`;
+   detail.textContent=`${record.kind==='baseline'?'Baseline':record.kind==='evaluation'?`Evaluation after ${record.attempt}`:`Attempt ${record.attempt}`} · ${outcome[r.status]} · ${r.diamonds}/${r.target} diamonds · ${r.ticks} steps`+(['auto','manual'].includes(r.explorationMode)&&Number.isFinite(r.exploration)?` · ${r.explorationMode==='auto'?'Auto':'Manual'} ${Math.round(r.exploration*100)}%`:'');
+   detail.title=typeof r.explorationReason==='string'?r.explorationReason:'';
    slider.setAttribute('aria-valuetext',detail.textContent);marker.setAttribute('visibility',v===null||v===undefined?'hidden':'visible');if(v!==null&&v!==undefined){marker.setAttribute('cx',String(x(record.attempt)));marker.setAttribute('cy',String(y(v)));}
   }
   slider.oninput=()=>{const r=visible[Number(slider.value)];if(r)select(r);};if(visible.length)select(visible[Number(slider.value)]);
@@ -113,7 +114,12 @@ export function mountLearning({getContext,pause,onWatch}){
  const countLabel=text('label','Attempts ',controls),count=document.createElement('select');count.setAttribute('aria-label','Training attempts');
  for(const n of [1,5,10,25,50,100]){const option=text('option',String(n),count);option.value=String(n);}count.value='10';countLabel.append(count);
  const exploreLabel=text('label','Exploration ',controls),explore=document.createElement('select');explore.setAttribute('aria-label','Exploration');
- for(const v of [.1,.25,.5]){const option=text('option',`${v*100}%`,explore);option.value=String(v);}explore.value='0.25';exploreLabel.append(explore);
+ const automatic=text('option','Auto',explore);automatic.value='auto';
+ for(const v of [.1,.25,.5]){const option=text('option',`${v*100}%`,explore);option.value=String(v);}explore.value='auto';
+ try{const previous=localStorage.getItem('deepfall.exploration-mode');if(['auto','0.1','0.25','0.5'].includes(previous))explore.value=previous;}catch{}
+ exploreLabel.append(explore);
+ const exploreInfo=text('p','',training);exploreInfo.id='learning-exploration';exploreInfo.className='learning-exploration-note';exploreInfo.setAttribute('aria-live','polite');let activeExploration=null;
+ explore.addEventListener('change',()=>{try{localStorage.setItem('deepfall.exploration-mode',explore.value);}catch{}renderExploration();});
  function button(label,fn,parent=controls){const b=text('button',label,parent);b.addEventListener('click',fn);return b;}
  let worker=null,saved=null,loadedKey='',ready=false,loadPromise=Promise.resolve(),generation=0,historyGeneration=0,page=0,history={total:0,training:0,records:[]},pendingSave=Promise.resolve();
  const actions=document.createElement('div');actions.className='learning-controls learning-actions';training.append(actions);
@@ -174,6 +180,7 @@ export function mountLearning({getContext,pause,onWatch}){
  const next=button('NEXT REPLAYS',async()=>{page++;await refreshHistory();},pager);
 
  function render(){
+  renderExploration();explore.disabled=Boolean(worker);
   section.classList.toggle('is-training',Boolean(worker));viewTabs.get('replays').textContent=history.total?`Replays (${history.total})`:'Replays';
   const results=saved?.results??[],wins=results.filter(r=>r.status==='won').length,recent=results.slice(-10),recentWins=recent.filter(r=>r.status==='won').length;
   const describe=r=>r.status==='won'?`escaped in ${r.ticks} steps`:`${r.diamonds}/${r.target} diamonds, ${r.status==='budget'?'attempt limit reached':'died'}`;
@@ -203,6 +210,11 @@ export function mountLearning({getContext,pause,onWatch}){
    if(record.reconstructed)text('small','Verified reconstruction',cell);tbody.append(row);
   }
  }
+ function renderExploration(){
+  if(explore.value!=='auto'){exploreInfo.textContent=`Manual · ${Math.round(Number(explore.value)*100)}% for each training attempt.`;return;}
+  const choice=worker&&activeExploration?activeExploration:adaptiveExploration(saved??{attempts:0,results:[]});
+  exploreInfo.textContent=`Auto · ${Math.round(choice.value*100)}% ${worker&&activeExploration?`for attempt ${activeExploration.attempt}`:'next attempt'}. ${choice.reason}`;
+ }
  async function refreshHistory(){
   const token=++historyGeneration,key=loadedKey,context={...getContext()};
   const records=await allLearningReplays(context),value=selectLearningReplays(records,{page,size:Number(pageSize.value),sort:sort.value,status:resultFilter.value,kind:kindFilter.value});
@@ -214,7 +226,7 @@ export function mountLearning({getContext,pause,onWatch}){
   if(worker&&key!==loadedKey){worker.terminate();worker=null;}
   if(!force&&key===loadedKey)return loadPromise;
   if(worker)return loadPromise;
-  const token=++generation;loadedKey=key;ready=false;saved=null;page=0;history={total:0,training:0,records:[]};charts.update([]);render();status.textContent='Loading saved learning and replay history…';
+  const token=++generation;loadedKey=key;ready=false;saved=null;activeExploration=null;page=0;history={total:0,training:0,records:[]};charts.update([]);render();status.textContent='Loading saved learning and replay history…';
   loadPromise=(async()=>{
    try{
     let model=await readLearningModel(context),legacy=false;
@@ -232,11 +244,12 @@ export function mountLearning({getContext,pause,onWatch}){
   if(worker||importing)return;await load();if(!ready||worker||importing)return;
   const context={...getContext()},key=contextKey(context);if(key!==loadedKey)return;pause();
   try{
-   const job=new Worker(new URL('./learning-worker.mjs',import.meta.url),{type:'module'});worker=job;render();
+   const job=new Worker(new URL('./learning-worker.mjs',import.meta.url),{type:'module'});worker=job;activeExploration=null;render();
    status.textContent=type==='recover'?'Verifying earlier replay inputs…':watch?'Planning an exploratory attempt to watch…':'Training in simulation…';
    job.onmessage=async({data})=>{
     if(worker!==job)return;
     try{
+     if(data.type==='exploration'){activeExploration=data;renderExploration();return;}
      if(data.type==='progress'){
       const label={baseline:'Measuring untrained player',evaluation:'Measuring learned player',recovery:'Verifying earlier replays'}[data.phase]??`Training attempt ${data.attempt}`;
       status.textContent=data.frontier!==undefined?`${label}: ${data.decision} search states · best ${data.diamonds} diamonds · ${data.frontier} open branches.`:`${label}: ${data.diamonds} diamonds, ${data.ticks} steps.`;return;
@@ -257,7 +270,7 @@ export function mountLearning({getContext,pause,onWatch}){
    job.onerror=()=>{if(worker!==job)return;job.terminate();worker=null;status.textContent='Training worker stopped unexpectedly. Saved replays and completed learning are preserved.';render();};
    const priorRuns=type==='train'?(await allLearningReplays(context)).map(r=>r.run).sort((a,b)=>(b.status==='won')-(a.status==='won')||b.diamonds-a.diamonds||a.ticks-b.ticks).slice(0,24):[];
    if(worker!==job)return;
-   job.postMessage({type,context,saved,partialRuns:priorRuns,count:watch?1:Number(count.value),exploration:Number(explore.value),watch});
+   job.postMessage({type,context,saved,partialRuns:priorRuns,count:watch?1:Number(count.value),explorationMode:explore.value==='auto'?'auto':'manual',exploration:explore.value==='auto'?undefined:Number(explore.value),watch});
   }catch(error){worker?.terminate();worker=null;status.textContent=error.message;render();}
  }
  document.querySelector('.sid-panel')?.before(section);if(!section.isConnected)document.querySelector('main').append(section);
