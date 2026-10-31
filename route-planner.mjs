@@ -172,7 +172,7 @@ export function* planRoute(context,{seed=1,maxNodes=1800,maxTicks=1800,prefixes=
    }
   }
   if(open.length>1800){open.sort((a,b)=>b.value-a.value);const groups=new Map();for(let i=0;i<open.length;i++){const n=open[i],k=`${n.g.collected}:${Math.floor(n.g.player.x/8)}:${Math.floor(n.g.player.y/6)}`;const count=(groups.get(k)??0)+1;groups.set(k,count);if(count>40){open.splice(i,1);i--;}}if(open.length>1800)open.length=1800;}
-  if(expanded%8===0)yield {decision:expanded+1,diamonds:best.g.collected,ticks:best.length,frontier:open.length,searchPosition:[g.player.x,g.player.y],searchDiamonds:g.collected,searchTicks:node.length};
+  if(expanded%8===0)yield {decision:expanded+1,diamonds:best.g.collected,ticks:best.length,frontier:open.length,searchPosition:[g.player.x,g.player.y],searchDiamonds:g.collected,searchTicks:node.length,previewInput:trace(node)};
  }
  open.sort((a,b)=>b.value-a.value);const groups=new Map(),candidates=[];
  for(const n of open){const k=`${n.g.collected}:${Math.floor(n.g.player.x/5)}:${Math.floor(n.g.player.y/4)}`,count=groups.get(k)??0;if(count>=3)continue;groups.set(k,count+1);candidates.push(n);if(candidates.length>=64)break;}

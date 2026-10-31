@@ -4,6 +4,7 @@ const {chromium}=await import(pathToFileURL(process.argv[2]).href),browser=await
 try{
  const page=await browser.newPage({viewport:{width:1440,height:1100}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:8767/',{waitUntil:'networkidle'});
+ await page.getByLabel('Render training in game',{exact:true}).uncheck();
  const explore=page.getByLabel('Exploration',{exact:true});assert.equal(await explore.inputValue(),'auto');assert.match(await page.locator('#learning-exploration').innerText(),/Auto · 25%.*baseline/);
  async function train(count){await page.getByLabel('Training attempts',{exact:true}).selectOption(String(count));await page.getByRole('button',{name:'TRAIN PLAYER',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#learning-status').textContent.startsWith('Training finished.'),null,{timeout:120000});}
  await train(5);assert.match(await page.locator('#learning-exploration').innerText(),/Auto · 20%.*consistent/);

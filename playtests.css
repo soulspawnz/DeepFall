@@ -43,6 +43,12 @@
 .learning-player .learning-best button {padding:7px 9px;}
 .learning-player .learning-hint {font-size:11px;color:var(--muted);margin:-6px 0 18px;}
 .learning-player .learning-exploration-note {font:10px/1.7 var(--mono);color:var(--muted);margin:12px 0 0;max-width:52ch;}
+.learning-preview-toggle {display:flex;align-items:center;gap:8px;margin-top:14px;font:10px/1.6 var(--mono);color:var(--muted);}
+.learning-preview-toggle input {accent-color:var(--lime);}
+.console.training-active #pause,.console.training-active #rewind,.console.training-active #watch-tests {display:none;}
+.console.training-active {height:auto;min-height:44px;gap:10px;}
+.console.training-active > div {flex-wrap:wrap;gap:10px;}
+#stop-training-preview {color:var(--lime);}
 .learning-player .learning-controls {gap:10px;}
 .learning-player .learning-training .learning-controls label {flex-direction:column;align-items:flex-start;gap:6px;}
 .learning-player .learning-training select {min-width:92px;}

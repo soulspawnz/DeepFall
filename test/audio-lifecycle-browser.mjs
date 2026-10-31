@@ -25,7 +25,7 @@ try{
  await page.locator('#pause').click();await page.waitForFunction(()=>window.__sidAC()>.00001);
  await page.locator('#pause').click();
  console.log('[OK] Pause theme plays; music-off keeps pause silent through sound toggles and chip switching; resume is clean.');
- await page.locator('#caves button').nth(1).click();await page.getByRole('button',{name:'TRAIN PLAYER',exact:true}).click();
+ await page.locator('#caves button').nth(1).click();await page.getByLabel('Render training in game',{exact:true}).uncheck();await page.getByRole('button',{name:'TRAIN PLAYER',exact:true}).click();
  await page.getByRole('tab',{name:'Replays',exact:true}).click();
  await page.getByRole('button',{name:'WATCH BASELINE',exact:true}).waitFor({state:'visible',timeout:120000});
  await page.getByRole('button',{name:'STOP TRAINING',exact:true}).click();

@@ -6,6 +6,7 @@ try {
  const page=await browser.newPage({viewport:{width:1440,height:1100}}),errors=[];
  page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:8767/',{waitUntil:'networkidle'});
+ await page.getByLabel('Render training in game',{exact:true}).uncheck();
  await page.getByRole('button',{name:'TRAIN PLAYER',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('#learning-status').textContent.startsWith('Training finished.'),null,{timeout:120000});
  await page.locator('.learning-report summary').click();
@@ -21,6 +22,7 @@ try {
  assert.match(await page.locator('#watch-tests').innerText(),/STOP REPLAY/);
  await page.locator('#watch-tests').click();
  await page.reload({waitUntil:'networkidle'});await page.waitForFunction(()=>document.querySelector('#learning-progress').textContent.startsWith('11 attempts learned'));
+ await page.getByLabel('Render training in game',{exact:true}).uncheck();
  assert.match(await page.locator('#learning-history-status').textContent(),/14 archived replays.*11 training attempts/);
  console.log('[OK] All fourteen replays persisted across reload');
  await page.clock.install();

@@ -5,6 +5,7 @@ import { SIDAudio } from './audio.mjs';
 import { setupFullscreen } from './fullscreen.mjs';
 import {LiveRecording, loadLiveRuns, saveLiveRun, applyReplayAction,importLiveRun} from './live-replays.mjs';
 import {mountLearning} from './learning-ui.mjs';
+import {cloneGame} from './simulation.mjs';
 
 const $ = id => document.getElementById(id);
 const canvas = $('game'), ctx = canvas.getContext('2d');
@@ -19,6 +20,8 @@ const completed = new Set();
 let replay=null;
 let recording=null;
 let learningUI=null;
+let trainingPreview=null;
+function displayedGame(){return trainingPreview?.game??game;}
 const library=document.createElement('section');
 library.className='playtest-library';library.hidden=true;library.setAttribute('aria-label','Watch Playtests library');
 document.querySelector('.sid-panel')?.before(library);
@@ -72,6 +75,38 @@ replayButton.id='watch-tests';replayButton.textContent='WATCH PLAYTESTS';
 replayButton.className='quiet';
 $('pause').parentElement.append(replayButton);
 const replayCaption=document.createElement('p');replayCaption.className='replay-caption';replayCaption.hidden=true;replayCaption.setAttribute('aria-live','polite');replayButton.parentElement.after(replayCaption);
+const stopPreview=document.createElement('button');stopPreview.id='stop-training-preview';stopPreview.textContent='STOP TRAINING';stopPreview.setAttribute('aria-label','Stop in-game training');stopPreview.hidden=true;replayButton.parentElement.append(stopPreview);stopPreview.addEventListener('click',()=>learningUI?.stop());
+function trainingFrame(data){
+ if(!data){
+  if(!trainingPreview)return;trainingPreview.resolve?.();trainingPreview=null;stopPreview.hidden=true;replayButton.closest('.console')?.classList.remove('training-active');
+  delete canvas.dataset.trainingPreview;delete canvas.dataset.trainingTick;delete canvas.dataset.trainingAttempt;delete canvas.dataset.trainingCandidate;
+  replayCaption.hidden=true;accumulator=0;sync();return;
+ }
+ if(document.hidden){if(trainingPreview)trainingFrame(null);return;}
+ if(data.context.campaign!==campaign||data.context.index!==selected||data.context.difficulty!==difficulty)return;
+ if(data.type==='route'&&!trainingPreview)trainingFrame({...data,type:'start'});
+ if(data.type==='start'){
+  const first=!trainingPreview;trainingPreview?.resolve?.();
+  const previewGame=new Game(selected,'classic',null,{...data.context,fastTrappedTimer:true});previewGame.start();
+  trainingPreview={game:previewGame,input:[],tick:0,states:[cloneGame(previewGame)],clock:0,attempt:data.attempt,candidate:0};
+  canvas.dataset.trainingPreview='true';stopPreview.hidden=false;replayButton.closest('.console')?.classList.add('training-active');held=[];snap=false;replay=null;replayButton.textContent='WATCH PLAYTESTS';
+  if(first)canvas.scrollIntoView({block:'center',behavior:'smooth'});sync();return;
+ }
+ const p=trainingPreview;if(!p||p.attempt!==data.attempt)return;
+ let common=0;while(common<Math.min(p.input.length,data.input.length)&&p.input[common].every((v,i)=>v===data.input[common][i]))common++;
+ if(p.tick>common){p.game=cloneGame(p.states[common]);p.tick=common;p.states.length=common+1;}
+ p.input=data.input;p.candidate=data.decision??p.candidate;p.final=Boolean(data.final);p.outcome=data.status;p.hold=0;
+ canvas.dataset.trainingCandidate=String(p.candidate);sync();
+ if(p.final)return new Promise(resolve=>{p.resolve=resolve;});
+}
+function advanceTrainingPreview(elapsed){
+ const p=trainingPreview;if(!p)return;p.clock+=elapsed;
+ // Animate actual engine inputs; retain checkpoints to show an honest rewind
+ // when the planner changes branches rather than teleporting a manual game.
+ while(p.clock>=1/30&&p.tick<p.input.length){p.clock-=1/30;const [dx,dy,snap]=p.input[p.tick++];p.game.step({dx,dy,snap});p.states[p.tick]=cloneGame(p.game);}
+ if(p.tick>=p.input.length){p.clock=0;if(p.final&&(p.hold+=elapsed)>=1){const resolve=p.resolve;p.resolve=null;resolve?.();}}
+ canvas.dataset.trainingTick=String(p.tick);canvas.dataset.trainingAttempt=String(p.attempt);sync();
+}
 replayButton.addEventListener('click',async()=>{
  if(replay){replay=null;replayButton.textContent='WATCH PLAYTESTS';libraryMessage.textContent='Playback stopped.';replayCaption.textContent='Playback stopped.';game.pause();sync();return;}
  library.hidden=!library.hidden;
@@ -117,6 +152,7 @@ function sounds() {
 }
 
 function newGame(index = selected, keepReplay=false) {
+  if(trainingPreview){learningUI?.stop();trainingFrame(null);}
   if(replay&&!keepReplay){replay=null;replayButton.textContent='WATCH PLAYTESTS';}
   const fastTrappedTimer=keepReplay?Boolean(replay.attempts[replay.index].fastTrappedTimer):true;
   selected = index; game = new Game(index, mode, null, {campaign,difficulty,fastTrappedTimer}); held = []; snap = false;
@@ -138,6 +174,7 @@ function advance() {
   } else newGame((selected+1)%caves().length);
 }
 function play() {
+  if(trainingPreview){learningUI?.stop();trainingFrame(null);}
   if (game.status === 'won' || (game.status==='dead' && game.bonus)) {
     advance(); game.start();
   } else if (game.status === 'dead') { newGame(); game.start(); }
@@ -160,7 +197,8 @@ function updateCaves() {
   if(active) $('caves').scrollTop=active.offsetTop-$('caves').firstElementChild.offsetTop;
 }
 function sync() {
-  sidAudio.configure({ paused: document.hidden || game.status === 'paused', mood: document.hidden?'silent':game.status==='paused'?'pause':game.status==='dead'?'death':'play' });
+  const game=displayedGame();
+  sidAudio.configure({ paused: document.hidden || Boolean(trainingPreview) || game.status === 'paused', mood: document.hidden||trainingPreview?'silent':game.status==='paused'?'pause':game.status==='dead'?'death':'play' });
   const cave=caveInfo(selected);
   $('cave-number').textContent = campaign==='original' ? `${cave.id} / LEVEL ${difficulty}` : `${String(selected+1).padStart(2,'0')} / 03`;
   $('cave-name').textContent = cave.name.toUpperCase();
@@ -174,6 +212,12 @@ function sync() {
   $('rewind').disabled = mode !== 'echo' || !game.rewinds || !game.history.length || game.status === 'won';
   $('pause').disabled = !['playing', 'paused'].includes(game.status);
   $('pause').textContent = game.status === 'paused' ? '▷ RESUME' : 'Ⅱ PAUSE';
+  if(trainingPreview){
+   $('overlay').hidden=true;$('pause').disabled=$('rewind').disabled=true;
+   const p=trainingPreview;$('status-text').textContent=`LIVE TRAINING · ATTEMPT ${p.attempt} · ${p.final?'CHOSEN RUN':'SEARCH CANDIDATE '+p.candidate}`;
+   replayCaption.hidden=false;replayCaption.textContent=p.final?`Training attempt ${p.attempt} · chosen run · recorded outcome: ${p.outcome==='won'?'escaped':p.outcome==='dead'?'died':'attempt limit'}`:`Live training search · attempt ${p.attempt} · candidate ${p.candidate} · branches can rewind or change`;
+   return;
+  }
   $('overlay').hidden = game.status === 'playing';
   const statuses = { ready: campaign==='original'?'ORIGINAL CAVE · STANDING BY':'STANDING BY', playing: !game.born?'ENTERING THE CAVE':game.timerRate>1?`TRAPPED · TIMER ×${game.timerRate}`:game.collected >= game.target ? 'EXIT OPEN · FIND YOUR WAY OUT' : 'EXPEDITION IN PROGRESS', paused: 'EXPEDITION PAUSED', dead: game.bonus?'BONUS ATTEMPT OVER':'SIGNAL LOST', won: 'BACK ABOVE GROUND' };
   $('status-text').textContent = statuses[game.status];
@@ -193,6 +237,7 @@ function sync() {
 }
 
 function draw(now) {
+ const game=displayedGame();
  ctx.imageSmoothingEnabled=false;ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);
  const frame=Math.floor(now/50);
  for(let y=0;y<viewHeight;y++)for(let x=0;x<viewWidth;x++)drawOriginal(ctx,game.tile(x,y),x,y,frame,game);
@@ -202,6 +247,7 @@ function draw(now) {
 spritesLoaded.catch(error=>{ $('status-text').textContent=error.message; });
 function loop(now) {
   const elapsed = Math.min((now - last) / 1000, .2); last = now;
+  if(trainingPreview){advanceTrainingPreview(elapsed);draw(now);requestAnimationFrame(loop);return;}
   if (game.status === 'playing') {
     accumulator += elapsed;
     while (accumulator >= STEP && game.status === 'playing') {
@@ -236,9 +282,11 @@ function loop(now) {
 }
 
 document.addEventListener('keydown', event => {
+  if(event.defaultPrevented)return;
   if (event.ctrlKey || event.metaKey || event.altKey || /INPUT|TEXTAREA|SELECT/.test(event.target.tagName)) return;
   // Keep keyboard activation of the page's ordinary buttons accessible.
   if (event.target.tagName === 'BUTTON' && ['Space', 'Enter'].includes(event.code)) return;
+  if(trainingPreview&&(directionKeys[event.code]||['Space','Enter','KeyP','KeyR','KeyZ'].includes(event.code))){learningUI?.stop();trainingFrame(null);}
   if (directionKeys[event.code]) {
     event.preventDefault();
     if (!held.includes(event.code)) held.push(event.code);
@@ -253,7 +301,7 @@ document.addEventListener('keyup', event => { held = held.filter(code => code !=
 function unfocus() { held = []; snap = false; if (game.status === 'playing') game.pause(); sync(); }
 window.addEventListener('blur', unfocus);
 window.addEventListener('focus', sync);
-document.addEventListener('visibilitychange', () => { if (document.hidden) unfocus(); else sync(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) {trainingFrame(null);unfocus();} else sync(); });
 $('play').addEventListener('click', play);
 $('pause').addEventListener('click', () => { game.pause(); sync(); });
 $('restart').addEventListener('click', () => { newGame(); play(); });
@@ -336,6 +384,7 @@ setupFullscreen(); newGame();
 learningUI=mountLearning({
  getContext:()=>({campaign,index:selected,difficulty}),
  pause:()=>{if(game.status==='playing'){game.pause();sync();}},
+ onTrainingPreview:trainingFrame,
  onWatch:attempt=>{replay={attempts:Array.isArray(attempt)?attempt:[attempt],index:0,tick:0,delay:0,learned:true};beginReplay();canvas.focus({preventScroll:true});canvas.scrollIntoView({block:'center',behavior:'smooth'});}
 });
 requestAnimationFrame(loop);
