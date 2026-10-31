@@ -186,3 +186,4 @@
 .replay-caption { margin:8px 0 0; color:#cce67e; font-size:12px; line-height:1.5; }
 .cabinet.fullscreen-active .replay-caption { display:none; }
 @media(max-width:600px){.learning-results th,.learning-results td{padding:5px 3px;font-size:11px}.learning-results button{padding:5px 3px;font-size:10px}}
+.branch-toggle{display:flex;align-items:center;gap:.45rem;font:inherit;color:#b7c7c1;cursor:pointer;white-space:nowrap}.branch-toggle input{accent-color:#78dce8}.branch-toggle[hidden]{display:none}

@@ -76,9 +76,11 @@ replayButton.className='quiet';
 $('pause').parentElement.append(replayButton);
 const replayCaption=document.createElement('p');replayCaption.className='replay-caption';replayCaption.hidden=true;replayCaption.setAttribute('aria-live','polite');replayButton.parentElement.after(replayCaption);
 const stopPreview=document.createElement('button');stopPreview.id='stop-training-preview';stopPreview.textContent='STOP TRAINING';stopPreview.setAttribute('aria-label','Stop in-game training');stopPreview.hidden=true;replayButton.parentElement.append(stopPreview);stopPreview.addEventListener('click',()=>learningUI?.stop());
+const branchLabel=document.createElement('label');branchLabel.className='branch-toggle';branchLabel.hidden=true;
+const branchToggle=document.createElement('input');branchToggle.type='checkbox';branchToggle.checked=true;branchToggle.setAttribute('aria-label','Show planning branches');branchLabel.append(branchToggle,document.createTextNode(' SHOW BRANCHES'));replayButton.parentElement.append(branchLabel);branchToggle.addEventListener('change',sync);
 function trainingFrame(data){
  if(!data){
-  if(!trainingPreview)return;trainingPreview.resolve?.();trainingPreview=null;stopPreview.hidden=true;replayButton.closest('.console')?.classList.remove('training-active');
+  if(!trainingPreview)return;trainingPreview.resolve?.();trainingPreview=null;stopPreview.hidden=true;branchLabel.hidden=true;delete canvas.dataset.planningBranches;replayButton.closest('.console')?.classList.remove('training-active');
   delete canvas.dataset.trainingPreview;delete canvas.dataset.trainingTick;delete canvas.dataset.trainingAttempt;delete canvas.dataset.trainingCandidate;
   replayCaption.hidden=true;accumulator=0;sync();return;
  }
@@ -89,13 +91,14 @@ function trainingFrame(data){
   const first=!trainingPreview;trainingPreview?.resolve?.();
   const previewGame=new Game(selected,'classic',null,{...data.context,fastTrappedTimer:true});previewGame.start();
   trainingPreview={game:previewGame,input:[],tick:0,states:[cloneGame(previewGame)],clock:0,attempt:data.attempt,candidate:0};
-  canvas.dataset.trainingPreview='true';stopPreview.hidden=false;replayButton.closest('.console')?.classList.add('training-active');held=[];snap=false;replay=null;replayButton.textContent='WATCH PLAYTESTS';
+  canvas.dataset.trainingPreview='true';stopPreview.hidden=false;branchLabel.hidden=false;replayButton.closest('.console')?.classList.add('training-active');held=[];snap=false;replay=null;replayButton.textContent='WATCH PLAYTESTS';
   if(first)canvas.scrollIntoView({block:'center',behavior:'smooth'});sync();return;
  }
  const p=trainingPreview;if(!p||p.attempt!==data.attempt)return;
  let common=0;while(common<Math.min(p.input.length,data.input.length)&&p.input[common].every((v,i)=>v===data.input[common][i]))common++;
  if(p.tick>common){p.game=cloneGame(p.states[common]);p.tick=common;p.states.length=common+1;}
  p.input=data.input;p.candidate=data.decision??p.candidate;p.final=Boolean(data.final);p.outcome=data.status;p.hold=0;
+ p.branches=data.branches??[];
  canvas.dataset.trainingCandidate=String(p.candidate);sync();
  if(p.final)return new Promise(resolve=>{p.resolve=resolve;});
 }
@@ -216,6 +219,7 @@ function sync() {
    $('overlay').hidden=true;$('pause').disabled=$('rewind').disabled=true;
    const p=trainingPreview;$('status-text').textContent=`LIVE TRAINING · ATTEMPT ${p.attempt} · ${p.final?'CHOSEN RUN':'SEARCH CANDIDATE '+p.candidate}`;
    replayCaption.hidden=false;replayCaption.textContent=p.final?`Training attempt ${p.attempt} · chosen run · recorded outcome: ${p.outcome==='won'?'escaped':p.outcome==='dead'?'died':'attempt limit'}`:`Live training search · attempt ${p.attempt} · candidate ${p.candidate} · branches can rewind or change`;
+   if(branchToggle.checked)replayCaption.textContent+=p.final?' · lime: recent route':' · lime: recent route · cyan: tested options at candidate endpoint · dashed red: ended in death';
    return;
   }
   $('overlay').hidden = game.status === 'playing';
@@ -236,11 +240,33 @@ function sync() {
   $('overlay-hint').textContent = hint;
 }
 
+function drawPlanningBranches(){
+ const p=trainingPreview,enabled=p&&branchToggle.checked;
+ canvas.dataset.planningBranches=String(enabled?(p.branches?.length??0):0);
+ if(!enabled)return;
+ function line(points,color,dashed=false){
+  if(points.length<2)return;
+  ctx.save();ctx.strokeStyle='#071410';ctx.lineWidth=3;ctx.lineJoin='round';ctx.beginPath();points.forEach(([x,y],i)=>ctx[i?'lineTo':'moveTo']((x+.5)*TILE,(y+.5)*TILE));ctx.stroke();
+  ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=1.2;if(dashed)ctx.setLineDash([3,3]);ctx.stroke();ctx.setLineDash([]);
+  for(let i=1;i<points.length;i++){
+   const [x,y]=points[i],prev=points[i-1],next=points[i+1];if(i%4&&next&&(x-prev[0])===(next[0]-x)&&(y-prev[1])===(next[1]-y))continue;
+   const dx=x-prev[0],dy=y-prev[1];if(!dx&&!dy)continue;
+   const angle=Math.atan2(dy,dx),px=(x+.5)*TILE,py=(y+.5)*TILE;
+   ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(px-4*Math.cos(angle-.6),py-4*Math.sin(angle-.6));ctx.lineTo(px-4*Math.cos(angle+.6),py-4*Math.sin(angle+.6));ctx.closePath();ctx.fill();
+  }
+  ctx.restore();
+ }
+ for(const b of p.branches??[])line(b.points,b.dead?'#f5a38c':'#78dce8',b.dead);
+ const trail=[];for(const s of p.states.slice(Math.max(0,p.tick-60),p.tick+1)){const point=[s.player.x,s.player.y],last=trail.at(-1);if(!last||last[0]!==point[0]||last[1]!==point[1])trail.push(point);}
+ line(trail,'#d3f17b');
+ const origin=p.branches?.[0]?.points[0];if(origin){ctx.strokeStyle='#78dce8';ctx.lineWidth=1;ctx.strokeRect(origin[0]*TILE+3,origin[1]*TILE+3,TILE-6,TILE-6);}
+}
 function draw(now) {
  const game=displayedGame();
  ctx.imageSmoothingEnabled=false;ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);
  const frame=Math.floor(now/50);
  for(let y=0;y<viewHeight;y++)for(let x=0;x<viewWidth;x++)drawOriginal(ctx,game.tile(x,y),x,y,frame,game);
+ if(trainingPreview)drawPlanningBranches();
  const direction=directionKeys[held.at(-1)]??directionNames[held.at(-1)];
  if(game.born&&game.playerAlive)drawRockford(ctx,game.player.x,game.player.y,frame,direction?.[0]??null);
 }

@@ -35,6 +35,19 @@ test('diamond supply counts future butterfly blasts and exempts regenerating wor
  g.grid[4][6]='a';assert.equal(diamondPotential(g),Infinity);
 });
 
+test('branch previews describe bounded, actual movement from the expanded candidate',()=>{
+ const grid=Array.from({length:22},()=>Array(40).fill('#'));
+ for(let y=2;y<7;y++)for(let x=2;x<12;x++)grid[y][x]='.';grid[4][10]='*';
+ const fixture={grid,player:{x:4,y:4},target:1,time:150};
+ const progress=planRoute({campaign:'original',index:0,difficulty:1},{fixture,maxNodes:1}).next();
+ assert.equal(progress.done,false);const {previewBranches,searchPosition}=progress.value;
+ assert.ok(previewBranches.length>1&&previewBranches.length<=12);
+ for(const b of previewBranches){
+  assert.deepEqual(b.points[0],searchPosition);assert.equal(typeof b.dead,'boolean');assert.ok(b.points.length<=33);
+  for(let i=1;i<b.points.length;i++){const [x,y]=b.points[i],[px,py]=b.points[i-1];assert.equal(Math.abs(x-px)+Math.abs(y-py),1);assert.notEqual(grid[y][x],'#');}
+ }
+});
+
 test('a butterfly blast that destroys a required loose diamond cannot seed the best partial',()=>{
  const grid=Array.from({length:22},()=>Array(40).fill('#'));
  for(let y=1;y<9;y++)for(let x=1;x<11;x++)grid[y][x]='.';

@@ -160,20 +160,22 @@ export function* planRoute(context,{seed=1,maxNodes=1800,maxTicks=1800,prefixes=
   routes.push(Array.from({length:4},()=>[0,0,false]));
   // Rotate equal-priority alternatives deterministically between attempts.
   const offset=(seed+expanded)%4;
-  const transitions=new Map();
+  const transitions=new Map(),branchChoices=new Map();
   for(const route of routes.slice(offset).concat(routes.slice(0,offset))){
-   let next=g,pathKey='';const actual=[];
+   let next=g,pathKey='';const actual=[],points=[[g.player.x,g.player.y]];
    for(let i=0;i<route.length;i++){
     if(node.length+actual.length>=maxTicks)break;
     const a=route[i],previousCollected=next.collected;pathKey+=`${a[0]+1}${a[1]+1}${+a[2]}`;
     let successor=transitions.get(pathKey);
     if(!successor){successor=cloneGame(next);successor.step({dx:a[0],dy:a[1],snap:a[2]});transitions.set(pathKey,successor);}
     next=successor;actual.push(a);
+    const last=points.at(-1);if(points.length<33&&(last[0]!==next.player.x||last[1]!==next.player.y))points.push([next.player.x,next.player.y]);
     if(next.status==='won')return {game:next,input:[...trace(node),...actual],expanded:expanded+1,seed,finished:true};
     if(next.status==='dead')break;
     // Keep escape branches along a corridor instead of only at its end.
     if(i<route.length-1&&(i===route.length-2||next.collected>previousCollected||i%4===3||(i>0&&(route[i-1][0]!==a[0]||route[i-1][1]!==a[1]))))add(next,node,actual.map(a=>[...a]));
    }
+   if(points.length>1){const key=JSON.stringify(points);if(!branchChoices.has(key))branchChoices.set(key,{points,dead:next.status==='dead'});}
    const count=open.length;add(next,node,actual);if(open.length>count)open.at(-1).value+=Math.max(-10,Math.min(10,guide(g,route)));
    if(next.status==='playing'&&next.falling.has(`${next.player.x},${next.player.y-1}`)){
     for(const escape of escapeRoutes(next)){
@@ -184,7 +186,12 @@ export function* planRoute(context,{seed=1,maxNodes=1800,maxTicks=1800,prefixes=
    }
   }
   if(open.length>1800){open.sort((a,b)=>b.value-a.value);const groups=new Map();for(let i=0;i<open.length;i++){const n=open[i],k=`${n.g.collected}:${Math.floor(n.g.player.x/8)}:${Math.floor(n.g.player.y/6)}`;const count=(groups.get(k)??0)+1;groups.set(k,count);if(count>40){open.splice(i,1);i--;}}if(open.length>1800)open.length=1800;}
-  if(expanded%8===0)yield {decision:expanded+1,diamonds:best.g.collected,ticks:best.length,frontier:open.length,searchPosition:[g.player.x,g.player.y],searchDiamonds:g.collected,searchTicks:node.length,previewInput:trace(node)};
+  if(expanded%8===0){
+   const choices=[...branchChoices.values()],first=new Set(),branches=[];
+   for(const b of choices){const key=JSON.stringify(b.points[1]);if(!first.has(key)){first.add(key);branches.push(b);}}
+   for(const b of choices)if(!branches.includes(b)&&branches.length<12)branches.push(b);
+   yield {decision:expanded+1,diamonds:best.g.collected,ticks:best.length,frontier:open.length,searchPosition:[g.player.x,g.player.y],searchDiamonds:g.collected,searchTicks:node.length,previewInput:trace(node),previewBranches:branches.slice(0,12)};
+  }
  }
  open.sort((a,b)=>b.value-a.value);const groups=new Map(),candidates=[];
  for(const n of open){const k=`${n.g.collected}:${Math.floor(n.g.player.x/5)}:${Math.floor(n.g.player.y/4)}`,count=groups.get(k)??0;if(count>=3)continue;groups.set(k,count+1);candidates.push(n);if(candidates.length>=64)break;}

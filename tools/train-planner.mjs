@@ -14,7 +14,7 @@ player.rememberPartials(archive.runs.filter(r=>r.contextKey===contextKey(context
 async function save(){await writeFile(outputPrefix+'.model.json',JSON.stringify(player.export()));await writeFile(outputPrefix+'.replays.json',JSON.stringify({format:'deepfall-learning-replays-1',runs:records}));}
 for(let n=0;n<count;n++){
  const generator=player.attempt({searchNodes});let step;
- do{step=generator.next();if(!step.done&&step.value.decision%80===1){const {previewInput,...progress}=step.value;console.log('[SEARCH]',JSON.stringify({attempt:player.attempts+1,...progress}));}}while(!step.done);
+ do{step=generator.next();if(!step.done&&step.value.decision%80===1){const {previewInput,previewBranches,...progress}=step.value;console.log('[SEARCH]',JSON.stringify({attempt:player.attempts+1,...progress}));}}while(!step.done);
  const run=step.value,record=learningReplay(context,'training',player.attempts,run);verifyLearningReplay(record);records.push(record);await save();
  console.log('[ATTEMPT]',JSON.stringify({attempt:player.attempts,status:run.status,diamonds:run.diamonds,ticks:run.ticks,searchExpanded:run.searchExpanded,reusedPartials:run.reusedPartials}));
  if(run.status==='won')break;

@@ -253,7 +253,7 @@ export function mountLearning({getContext,pause,onWatch,onTrainingPreview=()=>{}
      if(data.type==='exploration'){activeExploration=data;renderExploration();if(preview)onTrainingPreview({type:'start',context,attempt:data.attempt,exploration:data.value});return;}
      if(data.type==='progress'){
       const label={baseline:'Measuring untrained player',evaluation:'Measuring learned player',recovery:'Verifying earlier replays'}[data.phase]??`Training attempt ${data.attempt}`;
-      if(preview&&data.phase==='training'&&data.previewInput)onTrainingPreview({type:'route',context,attempt:data.attempt,input:data.previewInput,decision:data.decision});
+      if(preview&&data.phase==='training'&&data.previewInput)onTrainingPreview({type:'route',context,attempt:data.attempt,input:data.previewInput,decision:data.decision,branches:data.previewBranches});
       status.textContent=data.frontier!==undefined?`${label}: ${data.decision} search states · best ${data.diamonds} diamonds · ${data.frontier} open branches.`:`${label}: ${data.diamonds} diamonds, ${data.ticks} steps.`;return;
      }
      if(data.type==='record'||data.type==='recovered'){
