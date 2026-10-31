@@ -23,6 +23,7 @@ try{
  await page.getByRole('button',{name:'HIDE CONTENT',exact:true}).click();assert.equal(await page.locator('#learning-content').isVisible(),false);
  await page.reload({waitUntil:'networkidle'});assert.equal(await page.locator('#learning-content').isVisible(),false);await page.getByRole('button',{name:'SHOW CONTENT',exact:true}).click();
  async function upload(button,data){const chooser=page.waitForEvent('filechooser');await page.getByRole('button',{name:button,exact:true}).click();await(await chooser).setFiles({name:'backup.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(data))});}
+ await page.locator('.learning-backups summary').click();
  await upload('IMPORT LEARNING',fixture.model);await page.waitForFunction(()=>document.querySelector('#learning-status').textContent.startsWith('Learning imported.'));
  await upload('IMPORT REPLAYS',fixture.backup);await page.waitForFunction(()=>document.querySelector('#learning-status').textContent.startsWith('Imported 1 replays; 1 duplicates'));
  const invalid=structuredClone(fixture.backup);invalid.runs[1].run.score++;
