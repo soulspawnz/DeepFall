@@ -13,7 +13,7 @@ function hash(text) {
 export function contextKey(context){return `${context.campaign}:${context.difficulty}:${context.index}`;}
 function signature(g) {
  // Remaining time is deliberately excluded: experience transfers across waits.
- const s=g.snapshot();delete s.remaining;delete s.tick;
+ const s=g.snapshot();delete s.remaining;delete s.tick;delete s.trappedFor;
  if(!g.grid.some(r=>r.includes('a')))s.amoeba={dead:null,slow:0};
  if(!s.magic.active)s.magic.remaining=0;
  return hash(JSON.stringify(s));
@@ -82,8 +82,8 @@ export class LearningPlayer {
   this.baseline=valid&&validSummary(saved.baseline)?saved.baseline:null;this.evaluation=valid&&validSummary(saved.evaluation)?saved.evaluation:null;
  }
  export() {return {version:LEARNING_VERSION,context:this.context,attempts:this.attempts,values:[...this.values],results:this.results,best:this.best,baseline:this.baseline,evaluation:this.evaluation};}
- *attempt({seed=this.attempts+1,exploration=.25,learn=true,maxDecisions=120,fixture=null}={}) {
-  const game=new Game(this.context.index,'classic',fixture,this.context);game.start();
+ *attempt({seed=this.attempts+1,exploration=.25,learn=true,maxDecisions=120,fixture=null,fastTrappedTimer=true}={}) {
+  const game=new Game(this.context.index,'classic',fixture,{...this.context,fastTrappedTimer});game.start();
   const rng=randomGenerator(seed),input=[],history=[],visits=new Map();
   while(!game.born&&game.status==='playing'){game.step();input.push([0,0,false]);}
   let current=game;
@@ -113,7 +113,7 @@ export class LearningPlayer {
   }
   const status=current.status==='playing'?'budget':current.status;
   const result={...this.context,status,diamonds:current.collected,target:current.target,ticks:input.length,
-   score:current.score,remaining:current.remaining,reason:current.reason,route:hash(JSON.stringify(input)),seed,exploration:learn?exploration:0,input};
+   score:current.score,remaining:current.remaining,reason:current.reason,route:hash(JSON.stringify(input)),seed,exploration:learn?exploration:0,fastTrappedTimer,input};
   if(learn) {
    const outcome=(status==='won'?2000:status==='dead'?-400:-200)+Math.min(current.collected,current.target)*10-input.length*.15;
    for(let i=history.length-1;i>=0;i--) {
@@ -140,11 +140,11 @@ export function* recoverLearningReplays(context,saved){
   if(actual.route!==expected.route||actual.status!==expected.status||actual.diamonds!==expected.diamonds||actual.ticks!==expected.ticks||actual.score!==expected.score)
    throw new Error('An older attempt could not be reproduced exactly. No unverified replay was saved.');
  };
- if(original.baseline){const run=yield* fresh.attempt({learn:false});verify(run,original.baseline);records.push({kind:'baseline',attempt:0,run});}
+ if(original.baseline){const run=yield* fresh.attempt({learn:false,fastTrappedTimer:Boolean(original.baseline.fastTrappedTimer)});verify(run,original.baseline);records.push({kind:'baseline',attempt:0,run});}
  for(let n=0;n<original.results.length;n++){
-  const expected=original.results[n],run=yield* fresh.attempt({seed:expected.seed,exploration:expected.exploration??.25});
+  const expected=original.results[n],run=yield* fresh.attempt({seed:expected.seed,exploration:expected.exploration??.25,fastTrappedTimer:Boolean(expected.fastTrappedTimer)});
   verify(run,expected);records.push({kind:'training',attempt:n+1,run});
  }
- if(original.evaluation){const run=yield* fresh.attempt({learn:false});verify(run,original.evaluation);records.push({kind:'evaluation',attempt:original.attempts,run});}
+ if(original.evaluation){const run=yield* fresh.attempt({learn:false,fastTrappedTimer:Boolean(original.evaluation.fastTrappedTimer)});verify(run,original.evaluation);records.push({kind:'evaluation',attempt:original.attempts,run});}
  return records;
 }

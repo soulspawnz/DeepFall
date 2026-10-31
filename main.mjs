@@ -115,8 +115,9 @@ function sounds() {
 
 function newGame(index = selected, keepReplay=false) {
   if(replay&&!keepReplay){replay=null;replayButton.textContent='WATCH PLAYTESTS';}
-  selected = index; game = new Game(index, mode, null, {campaign,difficulty}); held = []; snap = false;
-  recording=keepReplay?null:new LiveRecording({campaign,index,difficulty,mode});
+  const fastTrappedTimer=keepReplay?Boolean(replay.attempts[replay.index].fastTrappedTimer):true;
+  selected = index; game = new Game(index, mode, null, {campaign,difficulty,fastTrappedTimer}); held = []; snap = false;
+  recording=keepReplay?null:new LiveRecording({campaign,index,difficulty,mode,fastTrappedTimer});
   viewWidth=game.bonus?20:WIDTH; viewHeight=game.bonus?12:HEIGHT;
   canvas.width=viewWidth*TILE; canvas.height=viewHeight*TILE;
   accumulator = 0; flash = 0;
@@ -171,7 +172,7 @@ function sync() {
   $('pause').disabled = !['playing', 'paused'].includes(game.status);
   $('pause').textContent = game.status === 'paused' ? '▷ RESUME' : 'Ⅱ PAUSE';
   $('overlay').hidden = game.status === 'playing';
-  const statuses = { ready: campaign==='original'?'ORIGINAL CAVE · STANDING BY':'STANDING BY', playing: !game.born?'ENTERING THE CAVE':game.collected >= game.target ? 'EXIT OPEN · FIND YOUR WAY OUT' : 'EXPEDITION IN PROGRESS', paused: 'EXPEDITION PAUSED', dead: game.bonus?'BONUS ATTEMPT OVER':'SIGNAL LOST', won: 'BACK ABOVE GROUND' };
+  const statuses = { ready: campaign==='original'?'ORIGINAL CAVE · STANDING BY':'STANDING BY', playing: !game.born?'ENTERING THE CAVE':game.timerRate>1?`TRAPPED · TIMER ×${game.timerRate}`:game.collected >= game.target ? 'EXIT OPEN · FIND YOUR WAY OUT' : 'EXPEDITION IN PROGRESS', paused: 'EXPEDITION PAUSED', dead: game.bonus?'BONUS ATTEMPT OVER':'SIGNAL LOST', won: 'BACK ABOVE GROUND' };
   $('status-text').textContent = statuses[game.status];
   if (game.status === 'playing') return;
   const allDone = campaign==='deepfall' && caves().every((_,i)=>completed.has(completionKey(i)));

@@ -92,6 +92,12 @@ The panel distinguishes simulated training and AI playback from live keyboard re
 
 Measured on original A/1 after ten training attempts: the evaluated policy improved from **285 to 164 steps**, with **9 training wins and 8 distinct routes**. Both evaluations reached the exit; the trained policy collects the required 12 rather than optimizing for extra diamonds. This is evidence for A/1, not proof that every cave is solved. `docs/learning-evaluation.json` retains the result; `test/learning-player.test.mjs` reproduces it and verifies save/reload and exact winning playback. `test/learning-browser.mjs` checks worker training, persistence, stopping, cave isolation, fresh AI attempts, replay separation and mobile layout.
 
+## Trapped timer
+
+New runs drain the countdown at **10x speed after 1.2 seconds of confirmed entrapment**. The status reads **TRAPPED / TIMER x10**. This changes only the countdown, not physics or animation speed. Standing still, choosing a blocked direction, possible horizontal pushes (including the original random push chance), snap-collectible diamonds and temporary enemy blocks do not count. Confirmation waits for falling/rolling objects and possible amoeba/explosion changes; a steel cage is immediately provable once the grace period passes. Pausing freezes the countdown, and Echo rewind restores the entrapment grace period.
+
+New live and AI recordings tag this timer rule. Older recordings without that tag retain their original normal countdown, including legacy learning reconstruction. The learned state table remains compatible; timer-only counters are excluded from its cave-state key, like remaining time.
+
 ## Fullscreen
 
 Click **FULLSCREEN 4:3** or press **F**. The game uses a centered 4:3 stage with black borders to preserve sprite proportions. HUD and controls remain available; **F**, **Esc**, or **EXIT FULLSCREEN** exits. Browsers without native fullscreen use a viewport-filling fallback. Touch controls remain available.

@@ -1,6 +1,8 @@
 export const WIDTH = 40;
 export const HEIGHT = 22;
 export const STEP = 0.12;
+export const TRAPPED_DELAY = 1.2;
+export const TRAPPED_TIMER_RATE = 10;
 export const CAVES = [
   { name: 'First light', subtitle: 'Learn the weight of the world.', target: 12, time: 150, seed: 741, tint: '#aabc72' },
   { name: 'The hollow', subtitle: 'Some things down here are awake.', target: 18, time: 170, seed: 903, tint: '#78b6bc' },
@@ -85,10 +87,38 @@ export class Game {
     this.history = [];
     this.rewinds = 3;
     this.events = [];
+    this.fastTrappedTimer = options.fastTrappedTimer !== false;
+    this.trappedFor = 0;
   }
   tile(x, y) { return this.grid[y]?.[x] ?? '#'; }
   occupied(x, y) { return this.born && this.playerAlive && this.player.x === x && this.player.y === y; }
   empty(x, y) { return this.tile(x, y) === ' ' && !this.occupied(x, y); }
+  get timerRate() { return this.fastTrappedTimer && this.trappedFor >= TRAPPED_DELAY - 1e-9 ? TRAPPED_TIMER_RATE : 1; }
+  isTrapped() {
+    if (!this.born || !this.playerAlive) return false;
+    const {x,y}=this.player;
+    // Treat enemies as potentially vacating their cells. A blocked random
+    // push, a snap-collectible diamond or a temporary enemy block is an escape.
+    const mayEmpty=(xx,yy)=>[' ','f','b'].includes(this.tile(xx,yy))&&!this.occupied(xx,yy);
+    for(const [dx,dy] of directions) {
+      const tile=this.tile(x+dx,y+dy);
+      if([' ','.','*','f','b'].includes(tile)||(tile==='X'&&this.collected>=this.target))return false;
+      if(tile==='O'&&dy===0&&!this.falling.has(key(x+dx,y))&&mayEmpty(x+dx*2,y))return false;
+    }
+    // Steel can never be removed, even by explosions elsewhere in the cave.
+    if(directions.every(([dx,dy])=>this.tile(x+dx,y+dy)==='#'))return true;
+    if(this.falling.size||this.blasts.size||this.grid.some(row=>row.includes('a')))return false;
+    // Be conservative until gravity is settled everywhere. An object may be
+    // about to start falling even before it appears in the falling set.
+    for(let yy=0;yy<this.grid.length;yy++)for(let xx=0;xx<this.grid[yy].length;xx++) {
+      if(!isLoose(this.tile(xx,yy)))continue;
+      if(mayEmpty(xx,yy+1))return false;
+      if(['O','*','+'].includes(this.tile(xx,yy+1))) {
+        if([-1,1].some(dx=>mayEmpty(xx+dx,yy)&&mayEmpty(xx+dx,yy+1)))return false;
+      }
+    }
+    return true;
+  }
   set(x, y, tile) { this.grid[y][x] = tile; }
   start() { if (this.status === 'ready') this.status = 'playing'; }
   pause() {
@@ -108,6 +138,7 @@ export class Game {
       blasts:[...this.blasts].map(([cell,blast])=>[cell,{...blast}]),
       magic:{...this.magic}, amoeba:{...this.amoeba}, randomState:this.randomState,
       born:this.born, birthRemaining:this.birthRemaining, playerAlive:this.playerAlive,
+      trappedFor:this.trappedFor,
     };
   }
   rewind() {
@@ -288,7 +319,10 @@ export class Game {
       this.magic.remaining=Math.max(0,this.magic.remaining-STEP);
       if(this.magic.remaining===0) this.magic.active=false;
     }
-    if(this.born) this.remaining = Math.max(0, this.remaining - STEP);
+    if(this.born) {
+      this.trappedFor=this.fastTrappedTimer&&this.isTrapped()?this.trappedFor+STEP:0;
+      this.remaining = Math.max(0, this.remaining - STEP*this.timerRate);
+    }
     if (this.remaining <= 0) this.lose('The cave ran out of time.');
   }
 }

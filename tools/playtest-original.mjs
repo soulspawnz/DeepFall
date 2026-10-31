@@ -35,7 +35,7 @@ for(let difficulty=1;difficulty<=5;difficulty++)for(let index=0;index<20;index++
    g.step({dx:chosen[0],dy:chosen[1]});input.push(chosen);g.events=[];
   }
  }catch(e){error=e.stack;}
- attempts.push({cave:ORIGINAL_CAVES[index].id,index,difficulty,pass:pass+1,status:error?'error':g.status==='playing'?'budget':g.status,reason:g.reason,diamonds:g.collected,target:g.target,ticks:input.length,simulatedSeconds:Math.round(input.length*STEP*100)/100,visited:visits.size,inputHash:createHash('sha256').update(JSON.stringify(input)).digest('hex'),input,error});
+ attempts.push({cave:ORIGINAL_CAVES[index].id,index,difficulty,pass:pass+1,fastTrappedTimer:true,status:error?'error':g.status==='playing'?'budget':g.status,reason:g.reason,diamonds:g.collected,target:g.target,ticks:input.length,simulatedSeconds:Math.round(input.length*STEP*100)/100,visited:visits.size,inputHash:createHash('sha256').update(JSON.stringify(input)).digest('hex'),input,error});
 }
 const totals=attempts.reduce((a,r)=>(a[r.status]=(a[r.status]??0)+1,a),{});
 await writeFile(new URL('../docs/playtest-original.json',import.meta.url),JSON.stringify({scope:'100 original variants, three input-driven goal-seeking attempts each',limitations:'Automated engine play attempts, not human completions or proof that every cave is beatable. Three direction-order policies; no future-state search or enemy/amoeba puzzle solver.',totals,attempts},null,2));

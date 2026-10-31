@@ -19,6 +19,7 @@ export class LiveRecording {
 
 export function validLiveRun(run) {
   return run?.version===1 && run.source==='live-input' && ['original','deepfall'].includes(run.campaign)
+    && (run.fastTrappedTimer===undefined || typeof run.fastTrappedTimer==='boolean')
     && Number.isInteger(run.index) && run.index>=0 && run.index<(run.campaign==='original'?20:3)
     && Number.isInteger(run.difficulty) && run.difficulty>=1 && run.difficulty<=5
     && ['echo','classic'].includes(run.mode) && run.result?.status==='won'

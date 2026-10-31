@@ -22,6 +22,7 @@ export function validLearningReplay(record){
  return record?.version===1&&['training','baseline','evaluation'].includes(record.kind)&&Number.isInteger(record.attempt)&&record.attempt>=0
   &&c&&['original','deepfall'].includes(c.campaign)&&Number.isInteger(c.index)&&c.index>=0&&c.index<(c.campaign==='original'?20:3)&&Number.isInteger(c.difficulty)&&c.difficulty>=1&&c.difficulty<=5
   &&record.contextKey===contextKey(c)&&contextKey(run??{})===record.contextKey&&['won','dead','budget'].includes(run?.status)
+  &&(run.fastTrappedTimer===undefined||typeof run.fastTrappedTimer==='boolean')
   &&typeof run.route==='string'&&run.route.length<=32&&Number.isFinite(run.score)&&Number.isInteger(run.diamonds)&&Number.isInteger(run.target)
   &&Array.isArray(run.input)&&run.input.length>0&&run.input.length<=4000&&run.ticks===run.input.length
   &&run.input.every(a=>Array.isArray(a)&&a.length===3&&Number.isInteger(a[0])&&Number.isInteger(a[1])&&Math.abs(a[0])+Math.abs(a[1])<=1&&typeof a[2]==='boolean');
