@@ -17,6 +17,14 @@
 .learning-heading + div {margin-top:16px;}
 .learning-filters {margin:16px 0;}
 .learning-player [hidden] {display:none;}
+.learning-player {font:12px/1.7 var(--sans);}
+.learning-player h3 {font:700 24px/1.1 var(--display);letter-spacing:.3px;}
+.learning-player button,.learning-player select {font:500 10px/1.4 var(--mono);letter-spacing:.4px;}
+.learning-player .learning-controls label {font:10px/1.5 var(--mono);color:var(--muted);}
+.learning-player #learning-status,.learning-player #learning-progress,.learning-player #learning-history-status {font:11px/1.8 var(--mono);}
+.learning-player .learning-results {font:11px/1.6 var(--mono);font-variant-numeric:tabular-nums;}
+.learning-player .learning-results th {font-weight:500;color:var(--muted);}
+.learning-player .learning-results button {font-size:10px;}
 .learning-controls label { display:flex; align-items:center; gap:8px; }
 .learning-controls select { background:#15200f; color:#d5e4b5; padding:9px; border:1px solid #53643d; font:inherit; }
 .learning-results { border-collapse:collapse; width:100%; max-width:700px; }
