@@ -13,6 +13,7 @@ Deliverable: reproducible browser checks and screenshots, with actual failures r
 3. Run `test/original-media-browser.mjs` with the installed Playwright module path, installed Chromium executable path and screenshot output directory. This verifies atlas palette, real AudioWorklet output, both SID models and errors.
 4. Run `test/original-browser.mjs` for campaign, layout or control changes. Use `test/sid-browser.mjs` for Deepfall soundtrack changes. Browser scripts take the same three arguments. These checks use a separate headless browser.
 5. Run `test/replay-browser.mjs` when replay UI changes, and `test/playtest-replays.test.mjs` when engine rules change. Regenerate the 300 attempts only when rule/solver changes invalidate them.
+   For fullscreen changes, run `test/fullscreen-browser.mjs` to check native entry, F exit, a 4:3 stage, mobile viewport fallback, touch controls and Escape exit. An optional fourth argument overrides the base URL for a hosted-site check. Verify relative sprite, replay and worklet URLs when deploying under a project subpath such as `/DeepFall/`.
 6. Review a screenshot of the active game, and report tested outcomes and limits. The in-app browser must be controlled through its provided runtime; if unavailable, say so and offer the visible replay control.
 
 ## Configuration
