@@ -1,70 +1,119 @@
 import {LEARNING_VERSION,LearningPlayer,contextKey} from './learning-player.mjs';
 import {ORIGINAL_CAVES} from './original-caves.mjs';
+import {learningReplay,replayAttempt,readLearningModel,saveLearningRecords,learningReplayPage,allLearningReplays} from './learning-archive.mjs';
 
-export function mountLearning({getContext,pause,onWatch}) {
+const outcome={won:'Escaped',dead:'Died',budget:'Attempt limit'};
+function downloadJSON(name,value){
+ const url=URL.createObjectURL(new Blob([JSON.stringify(value)],{type:'application/json'})),a=document.createElement('a');
+ a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+export function mountLearning({getContext,pause,onWatch}){
  const section=document.createElement('section');section.className='playtest-library learning-player';section.setAttribute('aria-label','Learning player');
- const title=document.createElement('h3');title.textContent='Learning player';section.append(title);
- const intro=document.createElement('p');intro.textContent='Train on the selected cave. The player explores routes and remembers which choices led to good or bad outcomes. Simulated training and AI replays are separate from your live runs.';section.append(intro);
+ function text(tag,value,parent=section){const e=document.createElement(tag);e.textContent=value;parent.append(e);return e;}
+ text('h3','Learning player');
+ text('p','Train on the selected cave. The player explores routes and remembers which choices led to good or bad outcomes. Simulated training and AI replays are separate from your live runs.');
+ text('p','Every completed training attempt, baseline and evaluation is saved in this browser, including failures. Old replays are not automatically deleted. Export all replays for a separate backup; clearing browser data removes local learning and replays.');
  const controls=document.createElement('div');controls.className='learning-controls';section.append(controls);
- const countLabel=document.createElement('label');countLabel.textContent='Attempts ';const count=document.createElement('select');count.setAttribute('aria-label','Training attempts');
- for(const n of [10,25,50,100]){const option=document.createElement('option');option.value=String(n);option.textContent=String(n);count.append(option);}controls.append(countLabel);countLabel.append(count);
- const exploreLabel=document.createElement('label');exploreLabel.textContent='Explore new routes ';const explore=document.createElement('select');explore.setAttribute('aria-label','Exploration');
- for(const [v,text]of [[.1,'10%'],[.25,'25%'],[.5,'50%']]){const option=document.createElement('option');option.value=String(v);option.textContent=text;explore.append(option);}explore.value='0.25';controls.append(exploreLabel);exploreLabel.append(explore);
- function button(text,fn){const b=document.createElement('button');b.textContent=text;b.addEventListener('click',fn);controls.append(b);return b;}
- let worker=null,saved=null,activeContext=null,loadedKey='',storageWarning='',watchRequested=false;
- const status=document.createElement('p');status.setAttribute('role','status');status.id='learning-status';section.append(status);
- const progress=document.createElement('p');progress.id='learning-progress';section.append(progress);
- const table=document.createElement('table');table.className='learning-results';table.innerHTML='<caption>Recent simulated attempts</caption><thead><tr><th>Attempt</th><th>Result</th><th>Diamonds</th><th>Steps</th></tr></thead><tbody></tbody>';section.append(table);
- const tbody=table.querySelector('tbody');
- const train=button('TRAIN PLAYER',()=>{
-  if(worker)return;const watchAttempt=watchRequested;watchRequested=false;load();pause();activeContext={...getContext()};
-  try {
-   worker=new Worker(new URL('./learning-worker.mjs',import.meta.url),{type:'module'});
-   worker.onmessage=({data})=>{
-    if(data.type==='progress'){status.textContent=`${data.phase==='baseline'?'Measuring untrained player':data.phase==='evaluation'?'Measuring learned player':`Training attempt ${data.attempt}`}: ${data.diamonds} diamonds, ${data.ticks} steps.`;return;}
-    if(data.type==='result'||data.type==='evaluation'){
-     saved=data.saved;storageWarning='';
-     try{localStorage.setItem('deepfall.learning.'+contextKey(activeContext),JSON.stringify(saved));}catch{storageWarning=' Browser storage is full or unavailable; export learning to keep it.';}
-     render();status.textContent=data.type==='evaluation'?`Learned player evaluation saved.${storageWarning}`:`Attempt ${saved.attempts}: ${data.result.status} (${data.result.diamonds}/${data.result.target}).${storageWarning}`;
-     if(data.replay)onWatch(data.replay);
-    }
-    if(data.type==='done'||data.type==='error'){
-     worker?.terminate();worker=null;train.disabled=false;stop.disabled=true;
-     status.textContent=data.type==='error'?`Training stopped: ${data.message}`:`Training finished.${storageWarning}`;render();
-    }
-   };
-   worker.onerror=()=>{worker?.terminate();worker=null;train.disabled=false;stop.disabled=true;status.textContent='Training worker stopped unexpectedly. Completed attempts remain saved.';render();};
-   train.disabled=true;watchNext.disabled=true;stop.disabled=false;status.textContent=watchAttempt?'Planning an exploratory attempt to watch…':'Training in simulation…';
-   worker.postMessage({type:'train',context:activeContext,saved,count:watchAttempt?1:Number(count.value),exploration:Number(explore.value),watch:watchAttempt});
-  }catch(error){worker?.terminate();worker=null;train.disabled=false;stop.disabled=true;status.textContent=error.message;render();}
+ const countLabel=text('label','Attempts ',controls),count=document.createElement('select');count.setAttribute('aria-label','Training attempts');
+ for(const n of [10,25,50,100]){const option=text('option',String(n),count);option.value=String(n);}countLabel.append(count);
+ const exploreLabel=text('label','Explore new routes ',controls),explore=document.createElement('select');explore.setAttribute('aria-label','Exploration');
+ for(const v of [.1,.25,.5]){const option=text('option',`${v*100}%`,explore);option.value=String(v);}explore.value='0.25';exploreLabel.append(explore);
+ function button(label,fn,parent=controls){const b=text('button',label,parent);b.addEventListener('click',fn);return b;}
+ let worker=null,saved=null,loadedKey='',ready=false,loadPromise=Promise.resolve(),generation=0,historyGeneration=0,page=0,history={total:0,training:0,records:[]},pendingSave=Promise.resolve();
+ const status=text('p','Loading saved learning…');status.id='learning-status';status.setAttribute('role','status');
+ const progress=text('p','');progress.id='learning-progress';
+ const historyInfo=text('p','');historyInfo.id='learning-history-status';
+ const table=document.createElement('table');table.className='learning-results';table.innerHTML='<caption>All saved AI replays for this cave</caption><thead><tr><th>Run</th><th>Result</th><th>Diamonds</th><th>Steps</th><th>Replay</th></tr></thead><tbody></tbody>';section.append(table);const tbody=table.querySelector('tbody');
+ const pager=document.createElement('div');pager.className='learning-controls';section.append(pager);
+ const train=button('TRAIN PLAYER',()=>startJob('train',false));
+ const stop=button('STOP TRAINING',async()=>{
+  worker?.terminate();worker=null;ready=false;render();status.textContent='Stopping and finishing replay storage…';
+  try{await pendingSave;await load(true);status.textContent='Stopped. Completed attempts, replays and learning are kept.';}catch(error){status.textContent=`Replay storage error: ${error.message}`;}
  });
- const stop=button('STOP TRAINING',()=>{
-  worker?.terminate();worker=null;train.disabled=false;stop.disabled=true;status.textContent='Stopped. Completed attempts and their learning are kept.';render();
- });stop.disabled=true;
- const watchNext=button('WATCH NEXT ATTEMPT',()=>{watchRequested=true;train.click();});
- const watch=button('WATCH BEST RUN',()=>{
-  if(!saved?.best)return;pause();onWatch({...saved.best,mode:'classic',input:saved.best.input,learningAttempts:saved.attempts});
+ const watchNext=button('WATCH NEXT ATTEMPT',()=>startJob('train',true));
+ const watchBest=button('WATCH BEST RUN',()=>{if(saved?.best){pause();onWatch({...saved.best,mode:'classic',learningAttempts:saved.attempts,replayKind:'best'});}});
+ const exportLearning=button('EXPORT LEARNING',()=>{if(saved)downloadJSON(`deepfall-learning-${loadedKey.replaceAll(':','-')}.json`,saved);});
+ const recover=button('RECOVER EARLIER REPLAYS',()=>startJob('recover',false));
+ const watchAll=button('WATCH ALL REPLAYS',async()=>{
+  try{const records=await allLearningReplays(getContext());if(records.length){pause();onWatch(records.map(replayAttempt));}}catch(error){status.textContent=error.message;}
  });
- const download=button('EXPORT LEARNING',()=>{
-  if(!saved)return;
-  const url=URL.createObjectURL(new Blob([JSON.stringify(saved)],{type:'application/json'}));const a=document.createElement('a');
-  a.href=url;a.download=`deepfall-learning-${contextKey(saved.context).replaceAll(':','-')}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ const exportAll=button('EXPORT ALL REPLAYS',async()=>{
+  try{downloadJSON('deepfall-all-learning-replays.json',{format:'deepfall-learning-replays-1',runs:await allLearningReplays()});}catch(error){status.textContent=error.message;}
  });
+ const previous=button('PREVIOUS REPLAYS',async()=>{page=Math.max(0,page-1);await refreshHistory();},pager);
+ const next=button('NEXT REPLAYS',async()=>{page++;await refreshHistory();},pager);
+
  function render(){
   const results=saved?.results??[],wins=results.filter(r=>r.status==='won').length,recent=results.slice(-10),recentWins=recent.filter(r=>r.status==='won').length;
-  const unique=new Set(results.map(r=>r.route)).size;
   const describe=r=>r.status==='won'?`escaped in ${r.ticks} steps`:`${r.diamonds}/${r.target} diamonds, ${r.status==='budget'?'attempt limit reached':'died'}`;
-  progress.textContent=`${saved?.attempts??0} attempts learned · ${wins}/${results.length} wins in retained history · last ${recent.length}: ${recentWins} wins · ${unique} distinct routes.`+(saved?.best?` Best win: ${saved.best.ticks} steps, ${saved.best.diamonds}/${saved.best.target} diamonds.`:' No winning route saved yet.')+(saved?.baseline?` Before learning: ${describe(saved.baseline)}.`:'')+(saved?.evaluation?` Current learned policy: ${describe(saved.evaluation)}.`:'');
-  watch.disabled=!saved?.best;watchNext.disabled=Boolean(worker);download.disabled=!saved;
+  progress.textContent=`${saved?.attempts??0} attempts learned · ${wins}/${results.length} wins in retained history · last ${recent.length}: ${recentWins} wins · ${new Set(results.map(r=>r.route)).size} distinct routes.`+(saved?.best?` Best win: ${saved.best.ticks} steps, ${saved.best.diamonds}/${saved.best.target} diamonds.`:' No winning route saved yet.')+(saved?.baseline?` Before learning: ${describe(saved.baseline)}.`:'')+(saved?.evaluation?` Current learned policy: ${describe(saved.evaluation)}.`:'');
+  train.disabled=!ready||Boolean(worker);stop.disabled=!worker;watchNext.disabled=!ready||Boolean(worker);watchBest.disabled=!saved?.best;exportLearning.disabled=!saved;
+  const missing=Math.max(0,(saved?.attempts??0)-history.training);recover.hidden=!missing;recover.disabled=!ready||Boolean(worker);
+  historyInfo.textContent=`${history.total} archived replays for this cave, including ${history.training} training attempts.`+(missing?` ${missing} earlier attempts have summaries only; recovery saves only traces that reproduce exactly.`:'')+(history.total?` Showing ${page*25+1}–${Math.min(history.total,(page+1)*25)}. Use a row to watch one run, or Watch All Replays for chronological playback.`:'');
+  watchAll.disabled=!history.total;exportAll.disabled=!ready;previous.disabled=page===0;next.disabled=(page+1)*25>=history.total;
   tbody.replaceChildren();
-  results.slice(-10).reverse().forEach((r,i)=>{const tr=document.createElement('tr');for(const text of [saved.attempts-i,{won:'Escaped',dead:'Died',budget:'Attempt limit'}[r.status],`${r.diamonds}/${r.target}`,r.ticks]){const td=document.createElement('td');td.textContent=String(text);tr.append(td);}tbody.append(tr);});
+  for(const record of history.records){
+   const label=record.kind==='baseline'?'Before learning':record.kind==='evaluation'?`Evaluation after ${record.attempt}`:`Attempt ${record.attempt}`;
+   const row=document.createElement('tr');for(const value of [label,outcome[record.run.status],`${record.run.diamonds}/${record.run.target}`,record.run.ticks])text('td',String(value),row);
+   const cell=document.createElement('td');row.append(cell);
+   button(record.kind==='training'?`WATCH ATTEMPT ${record.attempt}`:record.kind==='baseline'?'WATCH BASELINE':`WATCH EVALUATION ${record.attempt}`,()=>{pause();onWatch(replayAttempt(record));},cell);
+   if(record.reconstructed)text('small','Verified reconstruction',cell);tbody.append(row);
+  }
  }
- function load(){
-  const context=getContext(),key=contextKey(context);
-  if(worker&&key!==loadedKey){worker.terminate();worker=null;train.disabled=false;stop.disabled=true;}
-  if(worker||key===loadedKey)return;loadedKey=key;saved=null;
-  try{const data=JSON.parse(localStorage.getItem('deepfall.learning.'+key)??'null');if(data?.version===LEARNING_VERSION)saved=new LearningPlayer(context,data).export();}catch{}
-  status.textContent=`${context.campaign==='original'?'Original campaign':'Deepfall'} · cave ${context.campaign==='original'?ORIGINAL_CAVES[context.index].id:context.index+1} · difficulty ${context.difficulty}. Learning stays in this browser.`;render();
+ async function refreshHistory(){
+  const token=++historyGeneration,key=loadedKey,context={...getContext()};
+  const value=await learningReplayPage(context,page);
+  if(token!==historyGeneration||key!==loadedKey)return;
+  history=value;if(page>0&&page*25>=history.total){page=Math.max(0,Math.ceil(history.total/25)-1);return refreshHistory();}render();
+ }
+ function load(force=false){
+  const context={...getContext()},key=contextKey(context);
+  if(worker&&key!==loadedKey){worker.terminate();worker=null;}
+  if(!force&&key===loadedKey)return loadPromise;
+  if(worker)return loadPromise;
+  const token=++generation;loadedKey=key;ready=false;saved=null;page=0;history={total:0,training:0,records:[]};render();status.textContent='Loading saved learning and replay history…';
+  loadPromise=(async()=>{
+   try{
+    let model=await readLearningModel(context),legacy=false;
+    if(!model){try{model=JSON.parse(localStorage.getItem('deepfall.learning.'+key)??'null');legacy=Boolean(model);}catch{}}
+    const normalized=model?.version===LEARNING_VERSION?new LearningPlayer(context,model).export():null;
+    if(legacy&&normalized)await saveLearningRecords(context,normalized);
+    if(token!==generation)return;saved=normalized;ready=true;await refreshHistory();
+    if(token!==generation)return;
+    status.textContent=`${context.campaign==='original'?'Original campaign':'Deepfall'} · cave ${context.campaign==='original'?ORIGINAL_CAVES[context.index].id:context.index+1} · difficulty ${context.difficulty}. Learning and all completed replays stay in this browser.`;render();
+   }catch(error){if(token===generation){ready=false;status.textContent=`Replay storage unavailable: ${error.message}. Training is disabled until replays can be saved.`;render();}}
+  })();return loadPromise;
+ }
+ async function startJob(type,watch){
+  if(worker)return;await load();if(!ready||worker)return;
+  const context={...getContext()},key=contextKey(context);if(key!==loadedKey)return;pause();
+  try{
+   const job=new Worker(new URL('./learning-worker.mjs',import.meta.url),{type:'module'});worker=job;render();
+   status.textContent=type==='recover'?'Verifying earlier replay inputs…':watch?'Planning an exploratory attempt to watch…':'Training in simulation…';
+   job.onmessage=async({data})=>{
+    if(worker!==job)return;
+    try{
+     if(data.type==='progress'){
+      const label={baseline:'Measuring untrained player',evaluation:'Measuring learned player',recovery:'Verifying earlier replays'}[data.phase]??`Training attempt ${data.attempt}`;
+      status.textContent=`${label}: ${data.diamonds} diamonds, ${data.ticks} steps.`;return;
+     }
+     if(data.type==='record'||data.type==='recovered'){
+      const records=data.type==='record'?[learningReplay(context,data.kind,data.attempt,data.run)]:data.records.map(r=>learningReplay(context,r.kind,r.attempt,r.run,true));
+      pendingSave=saveLearningRecords(context,data.saved,records);await pendingSave;
+      if(worker!==job)return;saved=data.saved;await refreshHistory();
+      status.textContent=data.type==='recovered'?'Earlier replays recovered and fingerprint-verified.':`${data.kind==='training'?`Attempt ${data.attempt}`:data.kind}: replay and learning saved.`;
+      job.postMessage({type:'ack',id:data.id});
+      if(data.type==='record'&&data.watch&&data.kind==='training')onWatch(replayAttempt(records[0]));
+     }
+     if(data.type==='done'||data.type==='error'){
+      job.terminate();worker=null;status.textContent=data.type==='error'?`Training stopped: ${data.message}`:data.recovered?'Earlier replays recovered and verified.':'Training finished. All completed replays saved.';render();
+     }
+    }catch(error){job.terminate();worker=null;ready=false;status.textContent=`Could not save replay: ${error.message}. Training stopped; existing records are preserved.`;render();}
+   };
+   job.onerror=()=>{if(worker!==job)return;job.terminate();worker=null;status.textContent='Training worker stopped unexpectedly. Saved replays and completed learning are preserved.';render();};
+   job.postMessage({type,context,saved,count:watch?1:Number(count.value),exploration:Number(explore.value),watch});
+  }catch(error){worker?.terminate();worker=null;status.textContent=error.message;render();}
  }
  document.querySelector('.sid-panel')?.before(section);if(!section.isConnected)document.querySelector('main').append(section);
  load();return {refresh:load};

@@ -2,7 +2,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 
 const files = new Map([
-  ...['simulation.mjs','learning-player.mjs','learning-worker.mjs','learning-ui.mjs'].map(file=>['/'+file,[file,'text/javascript; charset=utf-8']]),
+  ...['simulation.mjs','learning-player.mjs','learning-worker.mjs','learning-ui.mjs','learning-archive.mjs'].map(file=>['/'+file,[file,'text/javascript; charset=utf-8']]),
   ['/live-replays.mjs',['live-replays.mjs','text/javascript; charset=utf-8']],
   ['/playtests.css',['playtests.css','text/css; charset=utf-8']],
   ...['A','B'].map(id=>[`/docs/live-${id}-won.png`,[`docs/live-${id}-won.png`,'image/png']]),

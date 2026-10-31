@@ -68,8 +68,9 @@ const replayButton=document.createElement('button');
 replayButton.id='watch-tests';replayButton.textContent='WATCH PLAYTESTS';
 replayButton.className='quiet';
 $('pause').parentElement.append(replayButton);
+const replayCaption=document.createElement('p');replayCaption.className='replay-caption';replayCaption.hidden=true;replayCaption.setAttribute('aria-live','polite');replayButton.parentElement.after(replayCaption);
 replayButton.addEventListener('click',async()=>{
- if(replay){replay=null;replayButton.textContent='WATCH PLAYTESTS';libraryMessage.textContent='Playback stopped.';game.pause();sync();return;}
+ if(replay){replay=null;replayButton.textContent='WATCH PLAYTESTS';libraryMessage.textContent='Playback stopped.';replayCaption.textContent='Playback stopped.';game.pause();sync();return;}
  library.hidden=!library.hidden;
  if(!library.hidden){if(game.status==='playing')game.pause();sync();showLibrary();}
 });
@@ -86,8 +87,12 @@ function beginReplay(){
  campaign=attempt.campaign??'original';difficulty=attempt.difficulty;mode=attempt.mode??'classic';
  $('campaign').value=campaign;$('difficulty').value=String(difficulty);$('difficulty').disabled=campaign!=='original';
  newGame(attempt.index,true);game.start();replay.tick=0;replay.delay=0;
+ replay.finished=false;
  for(const item of ['echo','classic']){$(item+'-mode').classList.toggle('selected',item===mode);$(item+'-mode').setAttribute('aria-pressed',String(item===mode));}
  replayButton.textContent=`STOP REPLAY ${replay.index+1}/${replay.attempts.length}`;
+ const kind=attempt.replayKind==='baseline'?'Before learning':attempt.replayKind==='evaluation'?`Policy evaluation after ${attempt.learningAttempts} attempts`:attempt.replayKind==='training'?`Training attempt ${attempt.learningAttempts}`:'Best learned run';
+ replayCaption.hidden=false;replayCaption.textContent=replay.learned?`AI replay ${replay.index+1}/${replay.attempts.length} · ${kind} · recorded result: ${attempt.status}${attempt.reconstructed?' · verified reconstruction':''}`:replay.live?'Recorded live-input replay.':`Automated archive replay ${replay.index+1}/${replay.attempts.length} · recorded result: ${attempt.status}`;
+ replayButton.title=replayCaption.textContent;
  libraryMessage.textContent=replay.live?'Playing an exact recorded live run, including rewind actions.':replay.learned?`AI replay after ${attempt.learningAttempts} training attempts. Recorded outcome: ${attempt.status}.`:`Automated attempt ${replay.index+1}/${replay.attempts.length}. Recorded outcome: ${attempt.status}.`;
 }
 const caves = () => campaign==='original' ? ORIGINAL_CAVES : EXPEDITION_CAVES;
@@ -201,7 +206,7 @@ function loop(now) {
       const [dx, dy] = directionKeys[direction] ?? directionNames[direction] ?? [0, 0];
       if(replay){
        const action=replay.attempts[replay.index].input[replay.tick++];
-       if(!action){const limited=replay.learned&&replay.attempts[replay.index].status==='budget';replay=null;replayButton.textContent='WATCH PLAYTESTS';game.pause();libraryMessage.textContent=limited?'AI attempt reached its training limit.':'Replay ended before a terminal result.';sync();break;}
+       if(!action){const limited=replay.learned&&replay.attempts[replay.index].status==='budget';game.pause();if(limited){replay.finished=true;replay.delay=0;libraryMessage.textContent='AI attempt reached its training limit.';}else{replay=null;replayButton.textContent='WATCH PLAYTESTS';libraryMessage.textContent='Replay ended before a terminal result.';}sync();break;}
        applyReplayAction(game,action);
       } else {const input={dx,dy,snap:snap||touchSnap};recording?.step(input);game.step(input);}
       sounds();
@@ -217,7 +222,7 @@ function loop(now) {
     if(replay&&game.status==='dead'&&replay.attempts[replay.index].input[replay.tick]?.rewind){
       applyReplayAction(game,replay.attempts[replay.index].input[replay.tick++]);sounds();sync();
     }
-    if(replay&&['dead','won'].includes(game.status)&&(replay.delay+=elapsed)>2){
+    if(replay&&(replay.finished||['dead','won'].includes(game.status))&&(replay.delay+=elapsed)>2){
       if(++replay.index<replay.attempts.length)beginReplay();
       else{replay=null;replayButton.textContent='WATCH PLAYTESTS';}
     }
@@ -327,6 +332,6 @@ setupFullscreen(); newGame();
 learningUI=mountLearning({
  getContext:()=>({campaign,index:selected,difficulty}),
  pause:()=>{if(game.status==='playing'){game.pause();sync();}},
- onWatch:attempt=>{replay={attempts:[attempt],index:0,tick:0,delay:0,learned:true};beginReplay();}
+ onWatch:attempt=>{replay={attempts:Array.isArray(attempt)?attempt:[attempt],index:0,tick:0,delay:0,learned:true};beginReplay();canvas.focus({preventScroll:true});canvas.scrollIntoView({block:'center',behavior:'smooth'});}
 });
 requestAnimationFrame(loop);

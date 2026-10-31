@@ -113,7 +113,7 @@ export class LearningPlayer {
   }
   const status=current.status==='playing'?'budget':current.status;
   const result={...this.context,status,diamonds:current.collected,target:current.target,ticks:input.length,
-   score:current.score,remaining:current.remaining,route:hash(JSON.stringify(input)),seed,input};
+   score:current.score,remaining:current.remaining,reason:current.reason,route:hash(JSON.stringify(input)),seed,exploration:learn?exploration:0,input};
   if(learn) {
    const outcome=(status==='won'?2000:status==='dead'?-400:-200)+Math.min(current.collected,current.target)*10-input.length*.15;
    for(let i=history.length-1;i>=0;i--) {
@@ -129,4 +129,22 @@ export class LearningPlayer {
   return result;
  }
  run(options) {const steps=this.attempt(options);let next;do{next=steps.next();}while(!next.done);return next.value;}
+}
+
+// Recover older simulated traces only when every stored fingerprint matches.
+export function* recoverLearningReplays(context,saved){
+ if(saved?.version!==LEARNING_VERSION||contextKey(saved.context??{})!==contextKey(context))throw new Error('Recovery requires a matching learning version and cave.');
+ const original=new LearningPlayer(context,saved),fresh=new LearningPlayer(context),records=[];
+ if(original.attempts!==original.results.length||original.attempts>100)throw new Error('Older inputs are unavailable for a complete verified reconstruction. Existing recordings are preserved.');
+ const verify=(actual,expected)=>{
+  if(actual.route!==expected.route||actual.status!==expected.status||actual.diamonds!==expected.diamonds||actual.ticks!==expected.ticks||actual.score!==expected.score)
+   throw new Error('An older attempt could not be reproduced exactly. No unverified replay was saved.');
+ };
+ if(original.baseline){const run=yield* fresh.attempt({learn:false});verify(run,original.baseline);records.push({kind:'baseline',attempt:0,run});}
+ for(let n=0;n<original.results.length;n++){
+  const expected=original.results[n],run=yield* fresh.attempt({seed:expected.seed,exploration:expected.exploration??.25});
+  verify(run,expected);records.push({kind:'training',attempt:n+1,run});
+ }
+ if(original.evaluation){const run=yield* fresh.attempt({learn:false});verify(run,original.evaluation);records.push({kind:'evaluation',attempt:original.attempts,run});}
+ return records;
 }
