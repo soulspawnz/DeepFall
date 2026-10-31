@@ -14,6 +14,9 @@ try{
   return {model:player.export(),backup:{format:'deepfall-learning-replays-1',runs:[records[0],learningReplay(context,'training',33,run)]}};
  });
  await page.reload({waitUntil:'networkidle'});await page.waitForFunction(()=>document.querySelector('#learning-history-status').textContent.startsWith('33 archived'));
+ assert.equal(await page.getByRole('tab',{name:'Overview',exact:true}).getAttribute('aria-selected'),'true');
+ await page.getByRole('tab',{name:'Overview',exact:true}).focus();await page.keyboard.press('End');assert.equal(await page.getByRole('tab',{name:'Data',exact:true}).getAttribute('aria-selected'),'true');await page.keyboard.press('Home');
+ await page.getByRole('tab',{name:'Replays',exact:true}).click();
  const rows=page.locator('.learning-results tbody tr');assert.equal(await rows.count(),10);assert.match(await rows.first().innerText(),/Attempt 32/);
  await page.getByLabel('Attempts per page',{exact:true}).selectOption('25');await page.waitForFunction(()=>document.querySelectorAll('.learning-results tbody tr').length===25);
  await page.getByRole('button',{name:'NEXT REPLAYS',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.learning-results tbody tr').length===8);
@@ -23,13 +26,14 @@ try{
  await page.getByRole('button',{name:'HIDE CONTENT',exact:true}).click();assert.equal(await page.locator('#learning-content').isVisible(),false);
  await page.reload({waitUntil:'networkidle'});assert.equal(await page.locator('#learning-content').isVisible(),false);await page.getByRole('button',{name:'SHOW CONTENT',exact:true}).click();
  async function upload(button,data){const chooser=page.waitForEvent('filechooser');await page.getByRole('button',{name:button,exact:true}).click();await(await chooser).setFiles({name:'backup.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(data))});}
- await page.locator('.learning-backups summary').click();
+ await page.getByRole('tab',{name:'Data',exact:true}).click();
  await upload('IMPORT LEARNING',fixture.model);await page.waitForFunction(()=>document.querySelector('#learning-status').textContent.startsWith('Learning imported.'));
  await upload('IMPORT REPLAYS',fixture.backup);await page.waitForFunction(()=>document.querySelector('#learning-status').textContent.startsWith('Imported 1 replays; 1 duplicates'));
  const invalid=structuredClone(fixture.backup);invalid.runs[1].run.score++;
  await upload('IMPORT REPLAYS',invalid);await page.waitForFunction(()=>document.querySelector('#learning-status').textContent.startsWith('Import failed:'));
- assert.match(await page.locator('#learning-history-status').innerText(),/34 archived replays/);
+ await page.getByRole('tab',{name:'Replays',exact:true}).click();assert.match(await page.locator('#learning-history-status').innerText(),/34 archived replays/);
  await page.reload({waitUntil:'networkidle'});await page.waitForFunction(()=>document.querySelector('#learning-history-status').textContent.startsWith('34 archived'));
+ await page.getByRole('tab',{name:'Replays',exact:true}).click();
  await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await page.screenshot({path:process.argv[4]+'/learning-library-controls.png',fullPage:true});assert.deepEqual(errors,[]);
  console.log('[OK] Collapse persists; page size, sorting and filters work; model/replay imports persist, verify outcomes, skip duplicates and reject corruption atomically; mobile fits.');
