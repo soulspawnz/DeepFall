@@ -20,8 +20,8 @@ test('imports verify actual replay outcome and reject bad models before storage'
  assert.throws(()=>validateLearningModel(p.export(),{...context,index:1}),/same cave/);
  assert.throws(()=>validateLearningModel({...p.export(),values:[['bad',{n:0,mean:4}]]},context),/invalid data/);
 });
-test('upgrading decision credit preserves history and best runs but removes incompatible values',()=>{
+test('enabling planning preserves existing learned values and attempt numbers',()=>{
  const c={campaign:'original',index:0,difficulty:1},old=new LearningPlayer(c,null,1);old.attempts=37;old.values.set('old',{n:2,mean:4});
  const upgraded=new LearningPlayer(c,old.export());upgraded.upgrade();
- assert.equal(upgraded.attempts,37);assert.equal(upgraded.policyStartAttempt,37);assert.equal(upgraded.values.size,0);assert.equal(upgraded.policyRevision,2);
+ assert.equal(upgraded.attempts,37);assert.equal(upgraded.planningRevision,1);assert.equal(upgraded.values.size,1);assert.deepEqual(upgraded.values.get('old'),{n:2,mean:4});assert.equal(upgraded.policyRevision,1);
 });

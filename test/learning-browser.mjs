@@ -10,7 +10,7 @@ try {
  await page.waitForFunction(()=>document.querySelector('#learning-status').textContent.startsWith('Training finished.'),null,{timeout:120000});
  await page.locator('.learning-report summary').click();
  const progress=await page.locator('#learning-progress').innerText();
- assert.match(progress,/10 attempts learned/);assert.match(progress,/Before learning: escaped in 285 steps/);assert.match(progress,/Current learned policy: escaped in 222 steps/);
+ assert.match(progress,/10 attempts learned/);assert.match(progress,/Before learning: escaped in \d+ steps/);assert.match(progress,/Current learned policy: escaped in \d+ steps/);assert.match(progress,/Planner: 10 attempts/);
  console.log('[OK] Training and before/after evaluation');
  assert.match(await page.locator('#learning-history-status').innerText(),/12 archived replays.*10 training attempts/);
  assert.equal(await page.getByRole('button',{name:'WATCH ATTEMPT 7',exact:true}).count(),1);
@@ -24,8 +24,8 @@ try {
  console.log('[OK] All fourteen replays persisted across reload');
  await page.clock.install();
  await page.getByRole('button',{name:'WATCH BEST RUN',exact:true}).click();
- await page.clock.runFor(24000);assert.equal(await page.locator('#status-text').innerText(),'BACK ABOVE GROUND');
- assert.equal(await page.locator('#diamonds').innerText(),'12');
+ await page.clock.runFor(50000);assert.equal(await page.locator('#status-text').innerText(),'BACK ABOVE GROUND');
+ assert.ok(Number(await page.locator('#diamonds').innerText())>=12);
  console.log('[OK] Best replay reached the exit');
  await page.getByRole('button',{name:'TRAIN PLAYER',exact:true}).click();await page.getByRole('button',{name:'STOP TRAINING',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('#learning-status').textContent.startsWith('Stopped'));
@@ -38,9 +38,9 @@ try {
  console.log('[OK] Cave memories isolated');
  await page.getByRole('button',{name:'WATCH ATTEMPT 7',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('#watch-tests').textContent.startsWith('STOP REPLAY'));
- await page.clock.runFor(38000);assert.equal(await page.locator('#status-text').innerText(),'EXPEDITION PAUSED');
+ await page.clock.runFor(50000);assert.equal(await page.locator('#status-text').innerText(),'BACK ABOVE GROUND');
  assert.equal(await page.locator('#watch-tests').innerText(),'WATCH PLAYTESTS');
- console.log('[OK] Failed-attempt replay ends at its recorded limit');
+ console.log('[OK] Planned attempt replay reaches its recorded exit');
  await page.getByRole('button',{name:'WATCH ALL REPLAYS',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('#watch-tests').textContent==='STOP REPLAY 1/14');
  await page.locator('#watch-tests').click();

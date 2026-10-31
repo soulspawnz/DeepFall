@@ -59,7 +59,7 @@ export function mountLearning({getContext,pause,onWatch}){
   try{await pendingSave;await load(true);status.textContent='Stopped. Completed attempts, replays and learning are kept.';}catch(error){status.textContent=`Replay storage error: ${error.message}`;}
  },actions);
  const watchNext=button('WATCH NEXT ATTEMPT',()=>startJob('train',true),actions);
- const watchBest=button('WATCH BEST RUN',()=>{if(saved?.best){pause();onWatch({...saved.best,mode:'classic',learningAttempts:saved.attempts,replayKind:'best'});}},bestLine);
+ const watchBest=button('WATCH BEST RUN',()=>{const run=saved?.best??saved?.partials?.[0];if(run){pause();onWatch({...run,mode:'classic',learningAttempts:saved.attempts,replayKind:saved.best?'best':'partial'});}},bestLine);
  const exportLearning=button('EXPORT LEARNING',()=>{if(saved)downloadJSON(`deepfall-learning-${loadedKey.replaceAll(':','-')}.json`,saved);},backupControls);
  let importing=false;
  const fileInput=document.createElement('input');fileInput.type='file';fileInput.accept='.json,application/json';fileInput.hidden=true;content.append(fileInput);
@@ -96,13 +96,14 @@ export function mountLearning({getContext,pause,onWatch}){
   attemptsMetric.textContent=String(saved?.attempts??0);winsMetric.textContent=`${recentWins} / ${recent.length}`;
   baselineMetric.textContent=compact(saved?.baseline);policyMetric.textContent=compact(saved?.evaluation);
   trend.textContent=saved?.evaluation?(improved?'Evaluation improved on the baseline.':'No measured improvement yet.'):'Complete a training batch to evaluate progress.';
-  trend.classList.toggle('improved',Boolean(improved));bestInfo.textContent=saved?.best?`Best escape · ${saved.best.ticks} steps`:'No escape saved yet.';
-  progress.textContent=`${saved?.attempts??0} attempts learned · ${wins}/${results.length} wins in retained history · last ${recent.length}: ${recentWins} wins${prior.length?` (previous ${prior.length}: ${priorWins})`:''} · ${new Set(results.map(r=>r.route)).size} distinct routes · ${saved?.values?.length??0} remembered decisions.`+(saved?.best?` Best win: ${saved.best.ticks} steps, ${saved.best.diamonds}/${saved.best.target} diamonds.`:' No winning route saved yet.')+(saved?.baseline?` Before learning: ${describe(saved.baseline)}.`:'')+(saved?.evaluation?` Current learned policy: ${describe(saved.evaluation)}. ${improved?'Measured improvement over baseline.':'No measured improvement over baseline yet; different routes alone are not progress.'}`:'')+((saved?.policyRevision??1)<2&&saved?.attempts?' Next training upgrades decision credit; saved replays and best runs are preserved.':'');
-  train.disabled=!ready||Boolean(worker);train.hidden=Boolean(worker);stop.disabled=!worker;stop.hidden=!worker;watchNext.disabled=!ready||Boolean(worker);watchBest.disabled=!saved?.best;exportLearning.disabled=!saved;
+  trend.classList.toggle('improved',Boolean(improved));bestInfo.textContent=saved?.best?`Best escape · ${saved.best.ticks} steps`:saved?.partials?.length?`Best partial · ${saved.partials[0].diamonds}/${saved.partials[0].target} · no escape yet`:'No escape saved yet.';
+  progress.textContent=`${saved?.attempts??0} attempts learned · ${wins}/${results.length} wins in retained history · last ${recent.length}: ${recentWins} wins${prior.length?` (previous ${prior.length}: ${priorWins})`:''} · ${new Set(results.map(r=>r.route)).size} distinct routes · ${saved?.values?.length??0} remembered decisions.`+(saved?.best?` Best win: ${saved.best.ticks} steps, ${saved.best.diamonds}/${saved.best.target} diamonds.`:' No winning route saved yet.')+(saved?.baseline?` Before learning: ${describe(saved.baseline)}.`:'')+(saved?.evaluation?` Current learned policy: ${describe(saved.evaluation)}. ${improved?'Measured improvement over baseline.':'No measured improvement over baseline yet; different routes alone are not progress.'}`:'')+(!saved?.planningRevision&&saved?.attempts?' Next training adds route planning and partial-run memory; existing decisions and replays are kept.':'');
+  train.disabled=!ready||Boolean(worker);train.hidden=Boolean(worker);stop.disabled=!worker;stop.hidden=!worker;watchNext.disabled=!ready||Boolean(worker);watchBest.disabled=!saved?.best&&!saved?.partials?.length;watchBest.textContent=saved?.best||!saved?.partials?.length?'WATCH BEST RUN':'WATCH BEST PROGRESS';exportLearning.disabled=!saved;
   const missing=Math.max(0,(saved?.attempts??0)-history.training);recover.hidden=!missing;recover.disabled=!ready||Boolean(worker);
   historyInfo.textContent=`${history.total} archived replays · ${history.training} training attempts · ${history.matched??0} match filters`+(history.matched?` · ${page*Number(pageSize.value)+1}–${Math.min(history.matched,(page+1)*Number(pageSize.value))} · Page ${page+1}/${Math.ceil(history.matched/Number(pageSize.value))}`:' · No matching replays')+(missing?` · ${missing} earlier inputs missing`:'.');
   watchAll.disabled=!history.total;exportAll.disabled=!ready;previous.disabled=page===0;next.disabled=(page+1)*Number(pageSize.value)>=(history.matched??0);
   if(saved?.policyStartAttempt>0)progress.textContent+=` Updated learning method: ${saved.attempts-saved.policyStartAttempt} attempts since upgrade; ${saved.policyStartAttempt} earlier attempts remain archived.`;
+  if(saved?.planningRevision)progress.textContent+=` Planner: ${saved.planningAttempts??0} attempts, ${saved.partials?.length??0} retained routes, ${saved.frontier?.length??0} saved search branches.`;
   importModel.disabled=importReplays.disabled=!ready||Boolean(worker)||importing;
   tbody.replaceChildren();
   for(const record of history.records){
@@ -111,6 +112,7 @@ export function mountLearning({getContext,pause,onWatch}){
    const cell=document.createElement('td');row.append(cell);
    const watchLabel=record.kind==='training'?`WATCH ATTEMPT ${record.attempt}`:record.kind==='baseline'?'WATCH BASELINE':`WATCH EVALUATION ${record.attempt}`;
    const playButton=button('PLAY',()=>{pause();onWatch(replayAttempt(record));},cell);playButton.setAttribute('aria-label',watchLabel);playButton.title=watchLabel;
+   if(record.run.plannerRevision)playButton.title+=` · planned route · ${record.run.searchExpanded} search states · ${record.run.reusedPartials} remembered routes`;
    if(record.reconstructed)text('small','Verified reconstruction',cell);tbody.append(row);
   }
  }
@@ -166,7 +168,9 @@ export function mountLearning({getContext,pause,onWatch}){
     }catch(error){job.terminate();worker=null;ready=false;status.textContent=`Could not save replay: ${error.message}. Training stopped; existing records are preserved.`;render();}
    };
    job.onerror=()=>{if(worker!==job)return;job.terminate();worker=null;status.textContent='Training worker stopped unexpectedly. Saved replays and completed learning are preserved.';render();};
-   job.postMessage({type,context,saved,count:watch?1:Number(count.value),exploration:Number(explore.value),watch});
+   const priorRuns=type==='train'?(await allLearningReplays(context)).map(r=>r.run).sort((a,b)=>(b.status==='won')-(a.status==='won')||b.diamonds-a.diamonds||a.ticks-b.ticks).slice(0,24):[];
+   if(worker!==job)return;
+   job.postMessage({type,context,saved,partialRuns:priorRuns,count:watch?1:Number(count.value),exploration:Number(explore.value),watch});
   }catch(error){worker?.terminate();worker=null;status.textContent=error.message;render();}
  }
  document.querySelector('.sid-panel')?.before(section);if(!section.isConnected)document.querySelector('main').append(section);

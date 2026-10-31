@@ -1,5 +1,6 @@
 import {Game} from './engine.mjs';
 import {ACTIONS,cloneGame} from './simulation.mjs';
+import {planRoute} from './route-planner.mjs';
 
 export const LEARNING_VERSION='deepfall-experience-2';
 const LIMIT=20000;
@@ -84,10 +85,44 @@ export class LearningPlayer {
   this.results=valid&&Array.isArray(saved.results)?saved.results.slice(-100).filter(validSummary):[];
   this.best=valid&&validSummary(saved.best)&&saved.best.status==='won'&&contextKey(saved.best)===contextKey(this.context)&&validInput(saved.best.input)?saved.best:null;
   this.baseline=valid&&validSummary(saved.baseline)?saved.baseline:null;this.evaluation=valid&&validSummary(saved.evaluation)?saved.evaluation:null;
+  this.planningRevision=valid&&saved.planningRevision===1?1:0;
+  this.planningAttempts=valid&&Number.isInteger(saved.planningAttempts)?Math.max(0,saved.planningAttempts):0;
+  this.partials=valid&&Array.isArray(saved.partials)?saved.partials.filter(r=>validSummary(r)&&validInput(r.input)&&contextKey(r)===contextKey(this.context)).slice(0,8):[];
+  this.frontier=valid&&Array.isArray(saved.frontier)?saved.frontier.filter(validInput).slice(0,64):[];
+  this.searchVisited=valid&&Array.isArray(saved.searchVisited)?saved.searchVisited.filter(e=>Array.isArray(e)&&typeof e[0]==='string'&&e[0].length<=32&&Number.isInteger(e[1])&&e[1]>=0&&e[1]<=4000).slice(-6000):[];
  }
- export() {return {version:LEARNING_VERSION,policyRevision:this.policyRevision,policyStartAttempt:this.policyStartAttempt,context:this.context,attempts:this.attempts,values:[...this.values],results:this.results,best:this.best,baseline:this.baseline,evaluation:this.evaluation};}
- upgrade(){if(this.policyRevision<2){this.policyRevision=2;this.policyStartAttempt=this.attempts;this.values.clear();this.evaluation=null;}}
- *attempt({seed=this.attempts+1,exploration=.25,learn=true,maxDecisions=120,fixture=null,fastTrappedTimer=true}={}) {
+ export() {return {version:LEARNING_VERSION,policyRevision:this.policyRevision,policyStartAttempt:this.policyStartAttempt,planningRevision:this.planningRevision,planningAttempts:this.planningAttempts,partials:this.partials,frontier:this.frontier,searchVisited:this.searchVisited,context:this.context,attempts:this.attempts,values:[...this.values],results:this.results,best:this.best,baseline:this.baseline,evaluation:this.evaluation};}
+ upgrade(){this.planningRevision=1;}
+ rememberPartials(runs){
+  const sorted=[...this.partials,...runs].filter(r=>validSummary(r)&&validInput(r.input)&&contextKey(r)===contextKey(this.context));
+  sorted.sort((a,b)=>(b.status==='won')-(a.status==='won')||b.diamonds-a.diamonds||a.ticks-b.ticks);
+  const routes=new Set();this.partials=sorted.filter(r=>{if(routes.has(r.route))return false;routes.add(r.route);return true;}).slice(0,8);
+ }
+ *plannedAttempt({seed=this.attempts+1,exploration=.25,learn=true,searchNodes=600,fixture=null,fastTrappedTimer=true}={}){
+  const memories=[...(this.best?[this.best]:[]),...this.partials];
+  const prefixes=memories.map(r=>r.status==='won'&&learn?r.input.slice(0,Math.max(1,Math.floor(r.input.length*(.6+(seed%7)*.05)))):r.input);
+  const offset=(seed*7)%Math.max(1,this.frontier.length);
+  prefixes.push(...this.frontier.slice(offset),...this.frontier.slice(0,offset));
+  const guide=(g,path)=>{const end=path.at(-1),id=path.length===1?`step:${ACTIONS.findIndex(a=>a[0]===end[0]&&a[1]===end[1]&&Boolean(a[2])===end[2])}`:`gem:${g.player.x+path.reduce((n,a)=>n+a[0],0)},${g.player.y+path.reduce((n,a)=>n+a[1],0)}`;return Math.tanh((this.values.get(`${signature(g,this.policyRevision)}/${id}`)?.mean??0)/500)*5;};
+  const planned=yield* planRoute(this.context,{seed:learn?seed:1,maxNodes:searchNodes,prefixes,fixture,fastTrappedTimer,guide,visited:learn?this.searchVisited:[],exploration:learn?exploration:0});
+  const game=planned.game,input=planned.input,status=game.status==='playing'?'budget':game.status;
+  const run={...this.context,status,diamonds:game.collected,target:game.target,ticks:input.length,score:game.score,remaining:game.remaining,reason:game.reason,route:inputFingerprint(input),seed,exploration:learn?exploration:0,fastTrappedTimer,input,plannerRevision:1,searchExpanded:planned.expanded,searchBudget:searchNodes,reusedPartials:memories.length};
+  if(learn){
+   this.attempts++;this.planningAttempts++;const {input:_,...summary}=run;this.results.push(summary);this.results=this.results.slice(-100);
+   this.rememberPartials([run]);this.frontier=(planned.frontier??[]).filter(validInput).slice(0,64);this.searchVisited=planned.visited??this.searchVisited;
+   if(status==='won'&&(!this.best||run.ticks<this.best.ticks))this.best=run;
+   // Preserve the existing table and add decision credit from the verified
+   // selected trajectory. Search uses those values only as bounded advice.
+   const replay=new Game(this.context.index,'classic',fixture,{...this.context,fastTrappedTimer}),history=[];replay.start();
+   for(const a of input){const key=`${signature(replay,this.policyRevision)}/step:${ACTIONS.findIndex(b=>b[0]===a[0]&&b[1]===a[1]&&Boolean(b[2])===a[2])}`,collected=replay.collected;replay.step({dx:a[0],dy:a[1],snap:a[2]});history.push({key,reward:(replay.collected-collected)*30+(replay.status==='won'?2000:0)-.15});}
+   let value=status==='dead'?-400:status==='budget'?-100:0;
+   for(let i=history.length-1;i>=0;i--){value=history[i].reward+.97*value;const {key}=history[i],old=this.values.get(key)??{n:0,mean:0};this.values.set(key,{n:old.n+1,mean:old.mean+(value-old.mean)/Math.min(old.n+1,8)});}
+   while(this.values.size>LIMIT)this.values.delete(this.values.keys().next().value);
+  }
+  return run;
+ }
+ *attempt({seed=this.attempts+1,exploration=.25,learn=true,maxDecisions=120,fixture=null,fastTrappedTimer=true,searchNodes=600}={}) {
+  if(this.planningRevision)return yield* this.plannedAttempt({seed,exploration,learn,fixture,fastTrappedTimer,searchNodes});
   const game=new Game(this.context.index,'classic',fixture,{...this.context,fastTrappedTimer});game.start();
   const rng=randomGenerator(seed),input=[],history=[],visits=new Map();
   while(!game.born&&game.status==='playing'){game.step();input.push([0,0,false]);}
@@ -140,6 +175,7 @@ export class LearningPlayer {
 // Recover older simulated traces only when every stored fingerprint matches.
 export function* recoverLearningReplays(context,saved){
  if(saved?.version!==LEARNING_VERSION||contextKey(saved.context??{})!==contextKey(context))throw new Error('Recovery requires a matching learning version and cave.');
+ if(saved.planningRevision)throw new Error('Planned runs require their saved input recordings. Import the replay backup to restore missing runs.');
  const original=new LearningPlayer(context,saved),fresh=new LearningPlayer(context,null,saved.policyRevision??1),records=[];
  if(saved.policyStartAttempt>0)throw new Error('Pre-upgrade input traces cannot be reconstructed by the newer policy. Import their saved replay backup instead.');
  if(original.attempts!==original.results.length||original.attempts>100)throw new Error('Older inputs are unavailable for a complete verified reconstruction. Existing recordings are preserved.');

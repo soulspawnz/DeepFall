@@ -67,7 +67,9 @@ export function validateLearningModel(model,context){
  if(!Number.isInteger(model.attempts)||model.attempts<0||model.attempts>1e9||!Array.isArray(model.values)||model.values.length>20000||![1,2].includes(model.policyRevision??1))throw new Error('Invalid or unsupported learning model.');
  const normalized=new LearningPlayer(context,model).export();
  if(normalized.values.length!==model.values.length||normalized.results.length!==(model.results??[]).length||(model.best&&!normalized.best))throw new Error('The learning file contains invalid data.');
+ if((model.planningRevision!==undefined&&![0,1].includes(model.planningRevision))||normalized.partials.length!==(model.partials??[]).length||normalized.frontier.length!==(model.frontier??[]).length||normalized.searchVisited.length!==(model.searchVisited??[]).length)throw new Error('Invalid planning memory.');
  if(normalized.best)verifyLearningReplay(learningReplay(context,'training',normalized.attempts,normalized.best));
+ for(const run of normalized.partials)verifyLearningReplay(learningReplay(context,'training',normalized.attempts,run));
  return normalized;
 }
 export function verifyLearningReplay(record){

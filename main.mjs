@@ -93,7 +93,7 @@ function beginReplay(){
  replay.finished=false;
  for(const item of ['echo','classic']){$(item+'-mode').classList.toggle('selected',item===mode);$(item+'-mode').setAttribute('aria-pressed',String(item===mode));}
  replayButton.textContent=`STOP REPLAY ${replay.index+1}/${replay.attempts.length}`;
- const kind=attempt.replayKind==='baseline'?'Before learning':attempt.replayKind==='evaluation'?`Policy evaluation after ${attempt.learningAttempts} attempts`:attempt.replayKind==='training'?`Training attempt ${attempt.learningAttempts}`:'Best learned run';
+ const kind=attempt.replayKind==='baseline'?'Before learning':attempt.replayKind==='evaluation'?`Policy evaluation after ${attempt.learningAttempts} attempts`:attempt.replayKind==='training'?`Training attempt ${attempt.learningAttempts}`:attempt.replayKind==='partial'?'Best partial route (not an escape)':'Best learned run';
  replayCaption.hidden=false;replayCaption.textContent=replay.learned?`AI replay ${replay.index+1}/${replay.attempts.length} · ${kind} · recorded result: ${attempt.status}${attempt.reconstructed?' · verified reconstruction':''}`:replay.live?'Recorded live-input replay.':`Automated archive replay ${replay.index+1}/${replay.attempts.length} · recorded result: ${attempt.status}`;
  replayButton.title=replayCaption.textContent;
  libraryMessage.textContent=replay.live?'Playing an exact recorded live run, including rewind actions.':replay.learned?`AI replay after ${attempt.learningAttempts} training attempts. Recorded outcome: ${attempt.status}.`:`Automated attempt ${replay.index+1}/${replay.attempts.length}. Recorded outcome: ${attempt.status}.`;

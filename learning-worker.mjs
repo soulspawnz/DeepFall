@@ -22,6 +22,7 @@ self.onmessage=async({data})=>{
    self.postMessage({type:'done',recovered:true});return;
   }
   const player=new LearningPlayer(data.context,data.saved);
+  player.rememberPartials(data.partialRuns??[]);
   player.upgrade();
   if(!player.baseline&&!cancelled){
    const run=await consume(player.attempt({learn:false}),'baseline',0);
