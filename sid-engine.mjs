@@ -73,7 +73,7 @@ export class SIDEngine {
     this.write(voice * 7 + 5, ad); this.write(voice * 7 + 6, sr);
   }
   configure(settings) {
-    if(settings.effects===false&&this.profile==='original')for(let i=0;i<3;i++)this.gate(i,0);
+    if(settings.effects===false&&this.effects&&this.profile==='original')for(let i=0;i<3;i++)this.gate(i,0);
     if(settings.profile&&this.profile!==settings.profile){this.profile=settings.profile;this.setModel(this.model);}
     if(settings.scene)this.originalSFX.scene=settings.scene;
     if (typeof settings.music === 'boolean' && this.music !== settings.music) {
@@ -103,7 +103,7 @@ export class SIDEngine {
       if (elapsed % 50 === 0 && elapsed / 50 < showcase.length) this.trigger([showcase[elapsed / 50]]);
       if (elapsed >= showcase.length * 50) this.demoFrame = null;
     }
-    if(this.profile==='original'){if(this.effects)this.originalSFX.tick();this.frame++;return;}
+    if(this.profile==='original'){this.originalSFX.tick(this.effects,this.music);this.frame++;return;}
     const step = Math.floor(this.frame / 6), sub = this.frame % 6;
     const bar = Math.floor(step / 16) % 8, beat = step % 16, root = ROOTS[bar];
     if (this.music) {
@@ -154,6 +154,7 @@ export class SIDEngine {
       this.samples += count; offset += count;
     }
     for (let i = 0; i < buffer.length; i++) buffer[i] *= this.master;
+    if(!this.music&&!this.effects)buffer.fill(0);
   }
   stats() { return { model: this.model, clock: PAL_CLOCK, frame: this.frame, samples: this.samples, writes: this.registerWrites, effects: this.effectCount, lastEffect: this.lastEffect, voices: 3 }; }
 }

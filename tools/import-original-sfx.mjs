@@ -11,7 +11,7 @@ for(const line of plain.split(/\r?\n/)){
  let address=parseInt(match[1],16);
  for(const byte of match[2].trim().split(/\s+/))memory.set(address++,parseInt(byte,16));
 }
-const ranges=[[0x7971,0x7a85],[0x7aa1,0x7ac1],[0x7cdf,0x7cf3],[0x6e28,0x6e64],[0x7080,0x708b],[0x718a,0x7190],[0x709d,0x70c4],[0x6d91,0x6dab]];
+const ranges=[[0x7971,0x7a85],[0x7aa1,0x7ac1],[0x7cdf,0x7cf3],[0x6e28,0x6e64],[0x7080,0x708b],[0x718a,0x7190],[0x709d,0x70c4],[0x6d91,0x6dab],[0x5fe8,0x60e7],[0x8317,0x8378],[0x83ac,0x842d]];
 const blocks=ranges.map(([start,end])=>({start,bytes:Array.from({length:end-start+1},(_,offset)=>{
  const value=memory.get(start+offset);if(value===undefined)throw new Error(`Missing byte ${(start+offset).toString(16)}`);return value;
 })}));

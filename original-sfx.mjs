@@ -7,11 +7,12 @@ export class OriginalSFX {
   reset() {
     this.m=new Uint8Array(65536);
     for(const block of SFX_BLOCKS) this.m.set(block.bytes,block.start);
-    this.m[0x94]=1; this.m[0x980a]=8; this.random=0x12345678; this.scene={};this.bonus=0;this.lastSecond=null;
+    this.m[0x94]=1; this.m[0x980a]=8; this.m[0x980c]=0xa0;this.random=0x12345678; this.scene={};this.bonus=0;this.lastSecond=null;
+    this.musicRegisters=new Uint8Array(14);this.captureMusic=false;
     for(let i=0;i<25;i++)this.writeSID(i,0);
     this.writeSID(24,15);
   }
-  write(a,v) { this.m[a]=v&255; if(a>=0xd400&&a<=0xd418)this.writeSID(a-0xd400,v&255); }
+  write(a,v) { this.m[a]=v&255; if(a>=0xd400&&a<=0xd418){const reg=a-0xd400;if(this.captureMusic)this.musicRegisters[reg]=v&255;else if(!(this.mixMusic&&reg<14&&!this.busyVoices[Math.floor(reg/7)]))this.writeSID(reg,v&255);} }
   call(entry,stop=-1) {
     let pc=entry,a=0,x=0,y=0,c=0,z=false,n=false;
     const stack=[],read=()=>this.m[pc++],word=()=>read()|(read()<<8);
@@ -23,6 +24,7 @@ export class OriginalSFX {
       switch(op) {
         case 0xa9:a=flags(read());break;case 0xa5:a=flags(this.m[read()]);break;
         case 0xad:a=flags(this.m[word()]);break;case 0xbd:a=flags(this.m[word()+x]);break;
+        case 0xb9:a=flags(this.m[word()+y]);break;case 0xa8:y=flags(a);break;
         case 0xa2:x=flags(read());break;case 0xae:x=flags(this.m[word()]);break;
         case 0xac:y=flags(this.m[word()]);break;
         case 0x8d:this.write(word(),a);break;case 0x85:this.write(read(),a);break;
@@ -41,6 +43,7 @@ export class OriginalSFX {
         case 0x4a:c=a&1;a=flags(a>>>1);break;case 0x0a:c=a>>>7;a=flags(a<<1);break;
         case 0x18:c=0;break;case 0x38:c=1;break;
         case 0x09:a=flags(a|read());break;
+        case 0x49:a=flags(a^read());break;
         case 0xe5:v=a-this.m[read()]-(1-c);c=+(v>=0);a=flags(v);break;
         case 0x69:v=a+read()+c;c=+(v>255);a=flags(v);break;
         default:throw new Error(`Original SFX opcode ${op.toString(16)} at ${at.toString(16)}`);
@@ -57,14 +60,29 @@ export class OriginalSFX {
     else if(name==='dig'||name==='step')this.m[0x9808]=name==='dig'?0xa5:0x35;
     else if(name==='win'){this.bonus=207;this.bonusStep=0;}
   }
-  tick() {
-    if(this.bonus||this.scene.active===false)return;
-    this.m[0x43]=this.scene.amoeba?1:0;this.m[0x8d]=this.scene.magic?1:0;this.m[0xc2]++;
+  tick(effects=true,music=false) {
+    if(this.bonus&&effects)return;
+    if(!effects)this.bonus=0;
+    this.mixMusic=music;this.busyVoices=[!!(this.m[0x987c]||(this.m[0x980d]&127)),!!(this.m[0x9811]||this.m[0x9809]||this.m[0x9808])];
+    const active=this.scene.active!==false;
+    if(effects){
+    // Death and other one-shots still have to finish after gameplay stops.
+    // Only ambient sources and new countdown beeps depend on an active cave.
+    this.m[0x43]=active&&this.scene.amoeba?1:0;this.m[0x8d]=active&&this.scene.magic?1:0;this.m[0xc2]++;
     this.call(0x7971);
-    if(this.scene.magic&&!(this.m[0xc2]&1))this.call(0x7aa1,0x7ac2);
+    if(active&&this.scene.magic&&!(this.m[0xc2]&1))this.call(0x7aa1,0x7ac2);
     const second=Math.ceil(this.scene.remaining??100);
-    if(second<10&&second>0&&second!==this.lastSecond){this.m[0xad]=second;this.call(0x709d);}
-    this.lastSecond=second;
+    if(active&&second<10&&second>0&&second!==this.lastSecond){this.m[0xad]=second;this.call(0x709d);}
+    if(active)this.lastSecond=second;
+    }
+    if(music){
+      this.m[0xc1]++;this.captureMusic=true;
+      try{this.call(0x83ac);}finally{this.captureMusic=false;}
+      const busy=[effects&&!!this.m[0x987c],effects&&!!(this.m[0x9811]||this.m[0x9809]||this.m[0x9808])];
+      // The original title tune uses voices 1 and 2. Gameplay effects temporarily
+      // take their original voice; all synthesis still uses one three-voice SID.
+      for(let voice=0;voice<2;voice++)if(!busy[voice])for(let reg=0;reg<7;reg++)this.writeSID(voice*7+reg,this.musicRegisters[voice*7+reg]);
+    }
   }
   subtick() {
     if(!this.bonus)return;

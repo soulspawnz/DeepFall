@@ -18,3 +18,10 @@ test('original sound renders finite non-silent reSID audio',()=>{
  const s=new SIDEngine(48000,'6581','original');s.trigger(['gem']);const out=new Float32Array(48000);s.render(out);
  assert.ok(out.every(Number.isFinite));assert.ok(out.some(x=>Math.abs(x)>.001));assert.equal(s.frame,50);
 });
+test('original music plays with effects disabled and can be muted',()=>{
+ const s=new SIDEngine(48000,'6581','original');s.configure({music:true,effects:false});
+ const out=new Float32Array(96000);s.render(out);assert.ok(out.some(x=>Math.abs(x)>.001));
+ assert.ok(s.originalSFX.m[0x9800]>0,'original melody advances');
+ s.configure({music:false});s.render(new Float32Array(48000));
+ const quiet=new Float32Array(48000);s.render(quiet);assert.ok(quiet.every(x=>Math.abs(x)<.0001));
+});
