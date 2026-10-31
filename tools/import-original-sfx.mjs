@@ -15,6 +15,6 @@ const ranges=[[0x7971,0x7a85],[0x7aa1,0x7ac1],[0x7cdf,0x7cf3],[0x6e28,0x6e64],[0
 const blocks=ranges.map(([start,end])=>({start,bytes:Array.from({length:end-start+1},(_,offset)=>{
  const value=memory.get(start+offset);if(value===undefined)throw new Error(`Missing byte ${(start+offset).toString(16)}`);return value;
 })}));
-await writeFile(new URL('../original-sfx-data.mjs',import.meta.url),`// Original C64 gameplay sound routines only; title music is not included.\n// Source: Retrointernals annotated disassembly, SHA-256 ${sourceHash}.\nexport const SFX_BLOCKS = ${JSON.stringify(blocks)};\n`);
+await writeFile(new URL('../original-sfx-data.mjs',import.meta.url),`// Selected original C64 gameplay sound routines and title-music routine/tables.\n// Source: Retrointernals annotated disassembly, SHA-256 ${sourceHash}.\nexport const SFX_BLOCKS = ${JSON.stringify(blocks)};\n`);
 await writeFile(new URL('../docs/original-sfx-provenance.json',import.meta.url),JSON.stringify({source:'https://www.retrointernals.org/boulder-dash/boulder-dash-disassembly.html',sha256:sourceHash,ranges:ranges.map(([from,to])=>({from:from.toString(16),to:to.toString(16)})),tables:{boulder:[0x32,0x09,0x07,0,0x81,0,0xf0],diamond:[0x78,0x14,0x07,0,0x11,0,0xf0],explosion:[0x32,0x14,0x0f,0,0x81,0x1b,0],crack:[0x32,0x2f,0,0,0x81,0x19,1]}},null,2)+'\n');
-console.log('[OK] Original gameplay SFX machine-code blocks extracted and pinned.');
+console.log('[OK] Original gameplay and title-music blocks extracted and pinned.');

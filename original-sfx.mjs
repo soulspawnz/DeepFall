@@ -1,6 +1,6 @@
 import { SFX_BLOCKS } from './original-sfx-data.mjs';
 
-// Bounded interpreter for the published gameplay sound routines only.
+// Bounded interpreter for selected published gameplay and title-music routines.
 // CIA timer entropy is replaced by a reproducible PRNG; this is not a C64 CPU.
 export class OriginalSFX {
   constructor(write) { this.writeSID=write; this.reset(); }

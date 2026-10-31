@@ -1,5 +1,7 @@
 # Planning and partial-run learning
 
+> Historical record of the first planner implementation. Later changes add supply-aware butterfly planning and branch visualization. See [LEARNING.md](LEARNING.md) for current behavior; the result below is the initial validation, not a latest-best benchmark.
+
 Deliverable: a stronger physics planner that branches from verified promising partial inputs, retaining existing learned values, attempts, best wins and all archived replays. Test original B/1 with explicit search/training limits and verify any claimed win by replaying its inputs through the unchanged engine.
 
 Constraints: no cave edits, teleporting, hardcoded winning route or reassignment of old replay outcomes. Keep earlier policy revisions available for legacy recovery. Existing browser data is backed up before validation in that browser. Failed attempts remain saved.

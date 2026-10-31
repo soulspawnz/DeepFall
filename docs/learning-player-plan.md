@@ -1,5 +1,7 @@
 # Persistent learning player
 
+> Historical record of the initial learning policy and replay-history extension. See [LEARNING.md](LEARNING.md) for the current planner, Auto exploration, graphs, live previews, and backup behavior. Measurements below belong to the earlier implementation.
+
 Deliverable: a browser player that explores alternative routes, retains outcome-based action values across attempts/reloads, and exposes honest progress and replayable wins.
 
 Constraints: use the actual game physics, keep simulated training separate from live keyboard recordings, isolate CPU-heavy training in a worker, preserve unrelated pending music changes, and never label diamond quota alone as a win.
