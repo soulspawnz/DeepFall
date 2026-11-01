@@ -1,6 +1,6 @@
 import {Game} from './engine.mjs';
 import {ACTIONS,cloneGame} from './simulation.mjs';
-import {planRoute} from './route-planner.mjs';
+import {planRoute,choosePlanningPriorities,learnPlanningPriorities,validPriorityLearning,planningOutcomeFitness} from './route-planner.mjs';
 
 export const LEARNING_VERSION='deepfall-experience-2';
 const LIMIT=20000;
@@ -110,10 +110,11 @@ export class LearningPlayer {
   this.partials=valid&&Array.isArray(saved.partials)?saved.partials.filter(r=>validSummary(r)&&validInput(r.input)&&contextKey(r)===contextKey(this.context)).slice(0,8):[];
   this.frontier=valid&&Array.isArray(saved.frontier)?saved.frontier.filter(validInput).slice(0,64):[];
   this.searchVisited=valid&&Array.isArray(saved.searchVisited)?saved.searchVisited.filter(e=>Array.isArray(e)&&typeof e[0]==='string'&&e[0].length<=32&&Number.isInteger(e[1])&&e[1]>=0&&e[1]<=4000).slice(-6000):[];
+  this.priorityLearning=valid&&validPriorityLearning(saved.priorityLearning)?JSON.parse(JSON.stringify(saved.priorityLearning)):null;
   const auto=valid?saved.autoExploration:null;
   this.autoExploration=auto&&Number.isFinite(auto.value)&&auto.value>=.1&&auto.value<=.6&&Number.isInteger(auto.adjustedAt)&&auto.adjustedAt>=0&&auto.adjustedAt<=this.attempts&&typeof auto.reason==='string'&&auto.reason.length<=200?{value:auto.value,adjustedAt:auto.adjustedAt,reason:auto.reason}:null;
  }
- export() {return {version:LEARNING_VERSION,policyRevision:this.policyRevision,policyStartAttempt:this.policyStartAttempt,planningRevision:this.planningRevision,planningAttempts:this.planningAttempts,partials:this.partials,frontier:this.frontier,searchVisited:this.searchVisited,autoExploration:this.autoExploration,context:this.context,attempts:this.attempts,values:[...this.values],results:this.results,best:this.best,baseline:this.baseline,evaluation:this.evaluation};}
+ export() {return {version:LEARNING_VERSION,policyRevision:this.policyRevision,policyStartAttempt:this.policyStartAttempt,planningRevision:this.planningRevision,planningAttempts:this.planningAttempts,partials:this.partials,frontier:this.frontier,searchVisited:this.searchVisited,priorityLearning:this.priorityLearning,autoExploration:this.autoExploration,context:this.context,attempts:this.attempts,values:[...this.values],results:this.results,best:this.best,baseline:this.baseline,evaluation:this.evaluation};}
  upgrade(){this.planningRevision=1;}
  rememberPartials(runs){
   const sorted=[...this.partials,...runs].filter(r=>validSummary(r)&&validInput(r.input)&&contextKey(r)===contextKey(this.context));
@@ -121,15 +122,17 @@ export class LearningPlayer {
   const routes=new Set();this.partials=sorted.filter(r=>{if(routes.has(r.route))return false;routes.add(r.route);return true;}).slice(0,8);
  }
  *plannedAttempt({seed=this.attempts+1,exploration=.25,learn=true,searchNodes=600,fixture=null,fastTrappedTimer=true}={}){
+  const priorities=choosePlanningPriorities(this.priorityLearning,seed,learn);
   const memories=[...(this.best?[this.best]:[]),...this.partials];
   const prefixes=memories.map(r=>r.status==='won'&&learn?r.input.slice(0,Math.max(1,Math.floor(r.input.length*(.6+(seed%7)*.05)))):r.input);
   const offset=(seed*7)%Math.max(1,this.frontier.length);
   prefixes.push(...this.frontier.slice(offset),...this.frontier.slice(0,offset));
   const guide=(g,path)=>{const end=path.at(-1),id=path.length===1?`step:${ACTIONS.findIndex(a=>a[0]===end[0]&&a[1]===end[1]&&Boolean(a[2])===end[2])}`:`gem:${g.player.x+path.reduce((n,a)=>n+a[0],0)},${g.player.y+path.reduce((n,a)=>n+a[1],0)}`;return Math.tanh((this.values.get(`${signature(g,this.policyRevision)}/${id}`)?.mean??0)/500)*5;};
-  const planned=yield* planRoute(this.context,{seed:learn?seed:1,maxNodes:searchNodes,prefixes,fixture,fastTrappedTimer,guide,visited:learn?this.searchVisited:[],exploration:learn?exploration:0});
+  const planned=yield* planRoute(this.context,{seed:learn?seed:1,maxNodes:searchNodes,prefixes,fixture,fastTrappedTimer,guide,visited:learn?this.searchVisited:[],exploration:learn?exploration:0,weights:priorities.weights});
   const game=planned.game,input=planned.input,status=game.status==='playing'?'budget':game.status;
-  const run={...this.context,status,diamonds:game.collected,target:game.target,ticks:input.length,score:game.score,remaining:game.remaining,reason:game.reason,route:inputFingerprint(input),seed,exploration:learn?exploration:0,fastTrappedTimer,input,plannerRevision:3,searchExpanded:planned.expanded,searchBudget:searchNodes,reusedPartials:memories.length};
+  const run={...this.context,status,diamonds:game.collected,target:game.target,ticks:input.length,score:game.score,remaining:game.remaining,reason:game.reason,route:inputFingerprint(input),seed,exploration:learn?exploration:0,fastTrappedTimer,input,plannerRevision:4,planningPriorities:priorities,priorityFitness:planningOutcomeFitness(game,input.length),searchExpanded:planned.expanded,searchBudget:searchNodes,reusedPartials:memories.length};
   if(learn){
+   this.priorityLearning=learnPlanningPriorities(this.priorityLearning,priorities,run.priorityFitness);
    this.attempts++;this.planningAttempts++;const {input:_,...summary}=run;this.results.push(summary);this.results=this.results.slice(-100);
    this.rememberPartials([run]);this.frontier=(planned.frontier??[]).filter(validInput).slice(0,64);this.searchVisited=planned.visited??this.searchVisited;
    if(status==='won'&&(!this.best||run.ticks<this.best.ticks))this.best=run;

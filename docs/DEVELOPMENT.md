@@ -31,7 +31,7 @@ npm test
 For a focused planner change:
 
 ```sh
-node --test test/route-planner.test.mjs test/learning-player.test.mjs test/adaptive-exploration.test.mjs
+node --test test/route-planner.test.mjs test/priority-learning.test.mjs test/learning-player.test.mjs test/adaptive-exploration.test.mjs
 ```
 
 Browser scripts are separate from `npm test`. They expect the local server to be running and caller-supplied, existing Playwright and Chromium installations:
@@ -46,7 +46,7 @@ Use the corresponding scripts for the changed feature:
 | --- | --- |
 | Original campaign / media | `original-browser.mjs`, `original-media-browser.mjs` |
 | Audio / state themes | `sid-browser.mjs`, `audio-lifecycle-browser.mjs` |
-| Training / preview | `learning-browser.mjs`, `training-preview-browser.mjs` |
+| Training / preview / priorities | `learning-browser.mjs`, `training-preview-browser.mjs`, `priority-learning-browser.mjs` |
 | Imports / graphs / Auto | `learning-library-browser.mjs`, `learning-progress-browser.mjs`, `adaptive-exploration-browser.mjs` |
 | Replays / fullscreen | `replay-browser.mjs`, `fullscreen-browser.mjs` |
 

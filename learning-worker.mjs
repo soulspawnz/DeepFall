@@ -1,4 +1,5 @@
 import {LearningPlayer,recoverLearningReplays,adaptiveExploration} from './learning-player.mjs';
+import {choosePlanningPriorities} from './route-planner.mjs';
 let cancelled=false,acknowledge=null,serial=0,waiting=0;
 const summary=run=>{const {input,...result}=run;return result;};
 function publish(data){return new Promise(resolve=>{waiting=++serial;acknowledge=resolve;self.postMessage({...data,id:waiting});});}
@@ -33,6 +34,7 @@ self.onmessage=async({data})=>{
    const choice=automatic?adaptiveExploration(player):{value:Math.min(.8,Math.max(.05,Number(data.exploration)||.25)),reason:'Fixed manual exploration.'};
    if(automatic)player.autoExploration=choice;
    self.postMessage({type:'exploration',mode:automatic?'auto':'manual',...choice,attempt:player.attempts+1});
+   self.postMessage({type:'priorities',attempt:player.attempts+1,...choosePlanningPriorities(player.priorityLearning,player.attempts+1,true)});
    const run=await consume(player.attempt({exploration:choice.value}),'training',player.attempts+1);
    if(!run||cancelled)break;
    const metadata={explorationMode:automatic?'auto':'manual',explorationReason:choice.reason};Object.assign(run,metadata);Object.assign(player.results.at(-1),metadata);

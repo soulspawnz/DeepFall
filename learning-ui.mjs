@@ -66,6 +66,7 @@ function mountLearningCharts(parent,watch){
   function select(record){const index=visible.findIndex(r=>r.id===record.id);if(index<0)return;slider.value=String(index);selectedId=record.id;const r=record.run,v=metric==='winrate'&&record.kind==='training'?data.training.find(p=>p.record.id===record.id)?.rollingWinRate:value(record);
    detail.textContent=`${record.kind==='baseline'?'Baseline':record.kind==='evaluation'?`Evaluation after ${record.attempt}`:`Attempt ${record.attempt}`} · ${outcome[r.status]} · ${r.diamonds}/${r.target} diamonds · ${r.ticks} steps`+(['auto','manual'].includes(r.explorationMode)&&Number.isFinite(r.exploration)?` · ${r.explorationMode==='auto'?'Auto':'Manual'} ${Math.round(r.exploration*100)}%`:'');
    detail.title=typeof r.explorationReason==='string'?r.explorationReason:'';
+   if(r.planningPriorities){detail.textContent+=` · priorities: ${r.planningPriorities.kind}`;detail.title+=`\nPriority profile ${r.planningPriorities.profile}: `+Object.entries(r.planningPriorities.weights).map(([key,value])=>`${key} ${value.toFixed(2)}x`).join(', ');}
    slider.setAttribute('aria-valuetext',detail.textContent);marker.setAttribute('visibility',v===null||v===undefined?'hidden':'visible');if(v!==null&&v!==undefined){marker.setAttribute('cx',String(x(record.attempt)));marker.setAttribute('cy',String(y(v)));}
   }
   slider.oninput=()=>{const r=visible[Number(slider.value)];if(r)select(r);};if(visible.length)select(visible[Number(slider.value)]);
@@ -121,12 +122,20 @@ export function mountLearning({getContext,pause,onWatch,onTrainingPreview=()=>{}
  const exploreInfo=text('p','',training);exploreInfo.id='learning-exploration';exploreInfo.className='learning-exploration-note';exploreInfo.setAttribute('aria-live','polite');let activeExploration=null;
  explore.addEventListener('change',()=>{try{localStorage.setItem('deepfall.exploration-mode',explore.value);}catch{}renderExploration();});
  function button(label,fn,parent=controls){const b=text('button',label,parent);b.addEventListener('click',fn);return b;}
- let worker=null,saved=null,loadedKey='',ready=false,loadPromise=Promise.resolve(),generation=0,historyGeneration=0,page=0,history={total:0,training:0,records:[]},pendingSave=Promise.resolve();
+ let worker=null,saved=null,loadedKey='',ready=false,loadPromise=Promise.resolve(),generation=0,historyGeneration=0,page=0,history={total:0,training:0,records:[]},pendingSave=Promise.resolve(),activePriorities=null;
  const actions=document.createElement('div');actions.className='learning-controls learning-actions';training.append(actions);
  const previewLabel=text('label','',training);previewLabel.className='learning-preview-toggle';const previewToggle=document.createElement('input');previewToggle.type='checkbox';previewToggle.checked=true;previewToggle.setAttribute('aria-label','Render training in game');previewLabel.append(previewToggle,document.createTextNode(' Render training in game'));
  const rewindsLabel=text('label','',training);rewindsLabel.className='learning-preview-toggle';const rewindsToggle=document.createElement('input');rewindsToggle.type='checkbox';try{rewindsToggle.checked=localStorage.getItem('deepfall.learning.search-rewinds')==='true';}catch{}rewindsToggle.setAttribute('aria-label','Show search rewinds');rewindsToggle.title='Show changing search candidates. Turn off to play completed attempts continuously.';rewindsLabel.append(rewindsToggle,document.createTextNode(' Show search rewinds'));
  text('p','Off: each completed attempt plays continuously. On: watch the search switch and rewind between candidates. This controls the preview, not Echo gameplay rewinds.',training).className='learning-preview-help';
  previewToggle.addEventListener('change',()=>{rewindsToggle.disabled=!previewToggle.checked;});rewindsToggle.addEventListener('change',()=>{try{localStorage.setItem('deepfall.learning.search-rewinds',String(rewindsToggle.checked));}catch{}});
+ const priorityDetails=text('details','',training);priorityDetails.className='learning-priority-details';text('summary','Planning priorities',priorityDetails);
+ const priorityInfo=text('p','',priorityDetails);priorityInfo.id='learning-priorities';
+ const priorityTable=text('table','',priorityDetails);priorityTable.setAttribute('aria-label','Planning priority multipliers');const priorityBody=text('tbody','',priorityTable);
+ function renderPriorities(){
+  const learned=saved?.priorityLearning,active=worker?activePriorities:null,weights=active?.weights??learned?.champion.weights;
+  priorityInfo.textContent=active?`Attempt ${active.attempt} · ${active.kind==='explore'?'testing adjusted weights':active.kind==='champion'?'rechecking retained weights':'measuring reference weights'} · ${learned?.trials??0} completed priority trials.`:learned?`${learned.trials} completed priority trials · retained profile ${learned.champion.profile}. Weights adapt from measured outcomes; evaluation does not train them.`:'Priority learning starts with a reference run, then tests bounded changes to the scoring weights.';
+  priorityBody.replaceChildren();for(const key of ['collection','supply','distance','speed','mobility','preparation','amoeba','push']){const row=text('tr','',priorityBody);text('th',key,row).scope='row';text('td',`${(weights?.[key]??1).toFixed(2)}×`,row);}
+ }
  const activity=text('div','');activity.className='learning-activity';nav.after(activity);
  const status=text('p','Loading saved learning…',activity);status.id='learning-status';status.setAttribute('role','status');
  const charts=mountLearningCharts(views.get('graphs'),record=>{pause();onWatch(replayAttempt(record));});
@@ -184,6 +193,7 @@ export function mountLearning({getContext,pause,onWatch,onTrainingPreview=()=>{}
  const next=button('NEXT REPLAYS',async()=>{page++;await refreshHistory();},pager);
 
  function render(){
+  renderPriorities();
   renderExploration();explore.disabled=previewToggle.disabled=Boolean(worker);rewindsToggle.disabled=Boolean(worker)||!previewToggle.checked;
   section.classList.toggle('is-training',Boolean(worker));viewTabs.get('replays').textContent=history.total?`Replays (${history.total})`:'Replays';
   const results=saved?.results??[],wins=results.filter(r=>r.status==='won').length,recent=results.slice(-10),recentWins=recent.filter(r=>r.status==='won').length;
@@ -211,6 +221,7 @@ export function mountLearning({getContext,pause,onWatch,onTrainingPreview=()=>{}
    const watchLabel=record.kind==='training'?`WATCH ATTEMPT ${record.attempt}`:record.kind==='baseline'?'WATCH BASELINE':`WATCH EVALUATION ${record.attempt}`;
    const playButton=button('PLAY',()=>{pause();onWatch(replayAttempt(record));},cell);playButton.setAttribute('aria-label',watchLabel);playButton.title=watchLabel;
    if(record.run.plannerRevision)playButton.title+=` · planned route · ${record.run.searchExpanded} search states · ${record.run.reusedPartials} remembered routes`;
+   if(record.run.planningPriorities)playButton.title+=` · priority profile ${record.run.planningPriorities.profile} (${record.run.planningPriorities.kind}) · outcome quality ${record.run.priorityFitness.toFixed(2)}`;
    if(record.reconstructed)text('small','Verified reconstruction',cell);tbody.append(row);
   }
  }
@@ -230,7 +241,7 @@ export function mountLearning({getContext,pause,onWatch,onTrainingPreview=()=>{}
   if(worker&&key!==loadedKey){worker.terminate();worker=null;onTrainingPreview(null);}
   if(!force&&key===loadedKey)return loadPromise;
   if(worker)return loadPromise;
-  const token=++generation;loadedKey=key;ready=false;saved=null;activeExploration=null;page=0;history={total:0,training:0,records:[]};charts.update([]);render();status.textContent='Loading saved learning and replay history…';
+  const token=++generation;loadedKey=key;ready=false;saved=null;activeExploration=null;activePriorities=null;page=0;history={total:0,training:0,records:[]};charts.update([]);render();status.textContent='Loading saved learning and replay history…';
   loadPromise=(async()=>{
    try{
     let model=await readLearningModel(context),legacy=false;
@@ -248,12 +259,13 @@ export function mountLearning({getContext,pause,onWatch,onTrainingPreview=()=>{}
   if(worker||importing)return;await load();if(!ready||worker||importing)return;
   const context={...getContext()},key=contextKey(context);if(key!==loadedKey)return;pause();
   try{
-   const job=new Worker(new URL('./learning-worker.mjs',import.meta.url),{type:'module'}),preview=type==='train'&&previewToggle.checked,searchRewinds=rewindsToggle.checked;worker=job;activeExploration=null;render();
+   const job=new Worker(new URL('./learning-worker.mjs',import.meta.url),{type:'module'}),preview=type==='train'&&previewToggle.checked,searchRewinds=rewindsToggle.checked;worker=job;activeExploration=null;activePriorities=null;render();
    status.textContent=type==='recover'?'Verifying earlier replay inputs…':watch?'Planning an exploratory attempt to watch…':'Training in simulation…';
    job.onmessage=async({data})=>{
     if(worker!==job)return;
     try{
      if(data.type==='exploration'){activeExploration=data;renderExploration();if(preview)onTrainingPreview({type:'start',context,attempt:data.attempt,exploration:data.value,searchRewinds});return;}
+     if(data.type==='priorities'){activePriorities=data;renderPriorities();return;}
      if(data.type==='progress'){
       const label={baseline:'Measuring untrained player',evaluation:'Measuring learned player',recovery:'Verifying earlier replays'}[data.phase]??`Training attempt ${data.attempt}`;
       if(preview&&searchRewinds&&data.phase==='training'&&data.previewInput)onTrainingPreview({type:'route',context,attempt:data.attempt,input:data.previewInput,decision:data.decision,branches:data.previewBranches,searchRewinds});

@@ -1,5 +1,6 @@
 import {LEARNING_VERSION,LearningPlayer,contextKey,inputFingerprint} from './learning-player.mjs';
 import {Game} from './engine.mjs';
+import {validPriorityWeights,priorityProfile} from './route-planner.mjs';
 
 let database;
 function openArchive(){
@@ -24,6 +25,7 @@ export function validLearningReplay(record){
   &&c&&['original','deepfall'].includes(c.campaign)&&Number.isInteger(c.index)&&c.index>=0&&c.index<(c.campaign==='original'?20:3)&&Number.isInteger(c.difficulty)&&c.difficulty>=1&&c.difficulty<=5
   &&record.contextKey===contextKey(c)&&contextKey(run??{})===record.contextKey&&['won','dead','budget'].includes(run?.status)
   &&(run.fastTrappedTimer===undefined||typeof run.fastTrappedTimer==='boolean')
+  &&(run.planningPriorities===undefined||(validPriorityWeights(run.planningPriorities?.weights)&&run.planningPriorities.profile===priorityProfile(run.planningPriorities.weights)&&['reference','explore','champion','evaluation'].includes(run.planningPriorities.kind)&&Number.isFinite(run.priorityFitness)&&Math.abs(run.priorityFitness)<1e6))
   &&typeof run.route==='string'&&run.route.length<=32&&Number.isFinite(run.score)&&Number.isFinite(run.remaining)&&Number.isInteger(run.diamonds)&&run.diamonds>=0&&run.diamonds<=10000&&Number.isInteger(run.target)&&run.target>=0&&run.target<=1000
   &&Array.isArray(run.input)&&run.input.length>0&&run.input.length<=4000&&run.ticks===run.input.length
   &&run.input.every(a=>Array.isArray(a)&&a.length===3&&Number.isInteger(a[0])&&Number.isInteger(a[1])&&Math.abs(a[0])+Math.abs(a[1])<=1&&typeof a[2]==='boolean');
@@ -82,6 +84,7 @@ export function validateLearningModel(model,context){
  if(normalized.values.length!==model.values.length||normalized.results.length!==(model.results??[]).length||(model.best&&!normalized.best))throw new Error('The learning file contains invalid data.');
  if((model.planningRevision!==undefined&&![0,1].includes(model.planningRevision))||normalized.partials.length!==(model.partials??[]).length||normalized.frontier.length!==(model.frontier??[]).length||normalized.searchVisited.length!==(model.searchVisited??[]).length)throw new Error('Invalid planning memory.');
  if(model.autoExploration&&!normalized.autoExploration)throw new Error('Invalid automatic exploration state.');
+ if(model.priorityLearning&&!normalized.priorityLearning)throw new Error('Invalid learned planning priorities.');
  if(normalized.best)verifyLearningReplay(learningReplay(context,'training',normalized.attempts,normalized.best));
  for(const run of normalized.partials)verifyLearningReplay(learningReplay(context,'training',normalized.attempts,run));
  return normalized;
