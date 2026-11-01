@@ -40,6 +40,8 @@ New expansion rules use a new explored-state fingerprint namespace. Old fingerpr
 
 Planner revision 3 adds generation setup proposals. It prioritizes clearing a blocked magic-wall outlet before releasing a rock above that wall, skips feed proposals once activation time is exhausted, and distinguishes an unused wall from an expired one in search keys. Around amoeba it considers access digs, retreat, and longer waits; a confirmed conversion into diamonds receives planning credit, while conversion into rocks does not. These are bounded search hints, not assumed diamonds: collection and escapes must occur in the engine. They do not guarantee containment or successful completion of the original G/H caves.
 
+For the distinction between amoeba access, actual containment, sufficient conversion yield, and safe harvesting, see [amoeba planning priorities](AMOEBA_PLANNING.md). Dirt is a possible growth cell, not a containment wall. These recommendations are separate from implemented rewards and learned model data.
+
 A partial result is the best candidate found within the search budget. Different searches can return the same incumbent, producing identical diamond and step counts. More route variety or higher exploration does not by itself establish progress.
 
 ## Auto exploration
