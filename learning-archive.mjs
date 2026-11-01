@@ -1,6 +1,6 @@
 import {LEARNING_VERSION,LearningPlayer,contextKey,inputFingerprint} from './learning-player.mjs';
 import {Game} from './engine.mjs';
-import {validPriorityWeights,priorityProfile} from './route-planner.mjs';
+import {validPriorityWeights,priorityProfile,validAmoebaSummary,amoebaSummary} from './route-planner.mjs';
 
 let database;
 function openArchive(){
@@ -25,6 +25,8 @@ export function validLearningReplay(record){
   &&c&&['original','deepfall'].includes(c.campaign)&&Number.isInteger(c.index)&&c.index>=0&&c.index<(c.campaign==='original'?20:3)&&Number.isInteger(c.difficulty)&&c.difficulty>=1&&c.difficulty<=5
   &&record.contextKey===contextKey(c)&&contextKey(run??{})===record.contextKey&&['won','dead','budget'].includes(run?.status)
   &&(run.fastTrappedTimer===undefined||typeof run.fastTrappedTimer==='boolean')
+  &&(run.amoebaPlanning===undefined||validAmoebaSummary(run.amoebaPlanning))
+  &&(run.searchAmoebaSteps===undefined||Number.isSafeInteger(run.searchAmoebaSteps)&&run.searchAmoebaSteps>=0&&run.searchAmoebaSteps<=1e9)
   &&(run.planningPriorities===undefined||(validPriorityWeights(run.planningPriorities?.weights)&&run.planningPriorities.profile===priorityProfile(run.planningPriorities.weights)&&['reference','explore','champion','evaluation'].includes(run.planningPriorities.kind)&&Number.isFinite(run.priorityFitness)&&Math.abs(run.priorityFitness)<1e6))
   &&typeof run.route==='string'&&run.route.length<=32&&Number.isFinite(run.score)&&Number.isFinite(run.remaining)&&Number.isInteger(run.diamonds)&&run.diamonds>=0&&run.diamonds<=10000&&Number.isInteger(run.target)&&run.target>=0&&run.target<=1000
   &&Array.isArray(run.input)&&run.input.length>0&&run.input.length<=4000&&run.ticks===run.input.length
@@ -94,6 +96,7 @@ export function verifyLearningReplay(record){
  const game=new Game(record.context.index,'classic',null,{...record.context,fastTrappedTimer:Boolean(record.run.fastTrappedTimer)});game.start();
  for(const [dx,dy,snap]of record.run.input)game.step({dx,dy,snap});
  const r=record.run;
+ if(r.amoebaPlanning){const actual=amoebaSummary(game);if(Object.keys(actual).some(k=>actual[k]!==r.amoebaPlanning[k]))throw new Error('A replay does not match its amoeba planning metadata. Nothing was imported.');}
  if(inputFingerprint(r.input)!==r.route||game.status!==(r.status==='budget'?'playing':r.status)||game.collected!==r.diamonds||game.target!==r.target||game.score!==r.score||Math.abs(game.remaining-r.remaining)>1e-7)throw new Error('A replay does not match its recorded outcome. Nothing was imported.');
  return learningReplay(record.context,record.kind,record.attempt,r,Boolean(record.reconstructed));
 }

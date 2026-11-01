@@ -1,10 +1,11 @@
 import {Game} from './engine.mjs';
 import {ACTIONS,cloneGame} from './simulation.mjs';
 import {planRoute,choosePlanningPriorities,learnPlanningPriorities,validPriorityLearning,planningOutcomeFitness} from './route-planner.mjs';
+import {amoebaSummary,validAmoebaSummary} from './route-planner.mjs';
 
 export const LEARNING_VERSION='deepfall-experience-2';
 const LIMIT=20000;
-function validSummary(r){return r&&['won','dead','budget'].includes(r.status)&&Number.isInteger(r.diamonds)&&r.diamonds>=0&&r.diamonds<=10000&&Number.isInteger(r.target)&&r.target>=0&&r.target<=1000&&Number.isInteger(r.ticks)&&r.ticks>0&&r.ticks<=4000&&Number.isFinite(r.score)&&Number.isFinite(r.remaining)&&typeof r.route==='string'&&r.route.length<=32;}
+function validSummary(r){return r&&['won','dead','budget'].includes(r.status)&&Number.isInteger(r.diamonds)&&r.diamonds>=0&&r.diamonds<=10000&&Number.isInteger(r.target)&&r.target>=0&&r.target<=1000&&Number.isInteger(r.ticks)&&r.ticks>0&&r.ticks<=4000&&Number.isFinite(r.score)&&Number.isFinite(r.remaining)&&typeof r.route==='string'&&r.route.length<=32&&(r.amoebaPlanning===undefined||validAmoebaSummary(r.amoebaPlanning));}
 function validInput(input){return Array.isArray(input)&&input.length>0&&input.length<=4000&&input.every(a=>Array.isArray(a)&&a.length===3&&Number.isInteger(a[0])&&Number.isInteger(a[1])&&Math.abs(a[0])+Math.abs(a[1])<=1&&typeof a[2]==='boolean');}
 function hash(text) {
  let a=2166136261,b=5381;
@@ -12,6 +13,12 @@ function hash(text) {
  return (a>>>0).toString(36)+(b>>>0).toString(36);
 }
 export const inputFingerprint=input=>hash(JSON.stringify(input));
+export function planningPrefixes(memories,frontier,seed,{learn=true,strategic=false}={}){
+ const prefixes=memories.map(r=>r.status==='won'&&learn?r.input.slice(0,Math.max(1,Math.floor(r.input.length*(.6+(seed%7)*.05)))):r.input),offset=(seed*7)%Math.max(1,frontier.length);
+ if(strategic)prefixes.push(...frontier.slice(0,8));
+ prefixes.push(...frontier.slice(offset),...frontier.slice(0,offset));
+ const seen=new Set();return prefixes.filter(input=>{const key=JSON.stringify(input);if(seen.has(key))return false;seen.add(key);return true;});
+}
 export function contextKey(context){return `${context.campaign}:${context.difficulty}:${context.index}`;}
 export function adaptiveExploration(model){
  const rows=(model.results??[]).filter(r=>(!r.kind||r.kind==='training')&&['won','dead','budget'].includes(r.status)),attempts=Math.max(0,Number(model.attempts)||0),old=model.autoExploration;
@@ -124,13 +131,13 @@ export class LearningPlayer {
  *plannedAttempt({seed=this.attempts+1,exploration=.25,learn=true,searchNodes=600,fixture=null,fastTrappedTimer=true}={}){
   const priorities=choosePlanningPriorities(this.priorityLearning,seed,learn);
   const memories=[...(this.best?[this.best]:[]),...this.partials];
-  const prefixes=memories.map(r=>r.status==='won'&&learn?r.input.slice(0,Math.max(1,Math.floor(r.input.length*(.6+(seed%7)*.05)))):r.input);
-  const offset=(seed*7)%Math.max(1,this.frontier.length);
-  prefixes.push(...this.frontier.slice(offset),...this.frontier.slice(0,offset));
+  const strategic=new Game(this.context.index,'classic',fixture,{...this.context,fastTrappedTimer}).grid.some(r=>r.includes('a'));
+  const prefixes=planningPrefixes(memories,this.frontier,seed,{learn,strategic});
   const guide=(g,path)=>{const end=path.at(-1),id=path.length===1?`step:${ACTIONS.findIndex(a=>a[0]===end[0]&&a[1]===end[1]&&Boolean(a[2])===end[2])}`:`gem:${g.player.x+path.reduce((n,a)=>n+a[0],0)},${g.player.y+path.reduce((n,a)=>n+a[1],0)}`;return Math.tanh((this.values.get(`${signature(g,this.policyRevision)}/${id}`)?.mean??0)/500)*5;};
   const planned=yield* planRoute(this.context,{seed:learn?seed:1,maxNodes:searchNodes,prefixes,fixture,fastTrappedTimer,guide,visited:learn?this.searchVisited:[],exploration:learn?exploration:0,weights:priorities.weights});
   const game=planned.game,input=planned.input,status=game.status==='playing'?'budget':game.status;
-  const run={...this.context,status,diamonds:game.collected,target:game.target,ticks:input.length,score:game.score,remaining:game.remaining,reason:game.reason,route:inputFingerprint(input),seed,exploration:learn?exploration:0,fastTrappedTimer,input,plannerRevision:5,planningPriorities:priorities,priorityFitness:planningOutcomeFitness(game,input.length),searchExpanded:planned.expanded,searchTacticalSteps:planned.tacticalSteps??0,searchBudget:searchNodes,reusedPartials:memories.length};
+  const run={...this.context,status,diamonds:game.collected,target:game.target,ticks:input.length,score:game.score,remaining:game.remaining,reason:game.reason,route:inputFingerprint(input),seed,exploration:learn?exploration:0,fastTrappedTimer,input,plannerRevision:6,planningPriorities:priorities,priorityFitness:planningOutcomeFitness(game,input.length),searchExpanded:planned.expanded,searchTacticalSteps:planned.tacticalSteps??0,searchAmoebaSteps:planned.amoebaSteps??0,searchBudget:searchNodes,reusedPartials:memories.length};
+  if(game.amoeba.dead||game.grid.some(r=>r.includes('a')))run.amoebaPlanning=amoebaSummary(game);
   if(learn){
    this.priorityLearning=learnPlanningPriorities(this.priorityLearning,priorities,run.priorityFitness);
    this.attempts++;this.planningAttempts++;const {input:_,...summary}=run;this.results.push(summary);this.results=this.results.slice(-100);

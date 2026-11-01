@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/engine.test.mjs test/sid.test.mjs test/original-caves.test.mjs test/original-mechanics.test.mjs test/original-sfx.test.mjs test/playtest-replays.test.mjs test/live-replays.test.mjs test/learning-player.test.mjs test/learning-library.test.mjs test/learning-progress.test.mjs test/route-planner.test.mjs test/generation-planning.test.mjs test/priority-learning.test.mjs test/offline-solvers.test.mjs test/adaptive-exploration.test.mjs test/trapped-timer.test.mjs test/audio-lifecycle.test.mjs test/search-performance.test.mjs test/butterfly-planning.test.mjs",
+    "test": "node --test test/engine.test.mjs test/sid.test.mjs test/original-caves.test.mjs test/original-mechanics.test.mjs test/original-sfx.test.mjs test/playtest-replays.test.mjs test/live-replays.test.mjs test/learning-player.test.mjs test/learning-library.test.mjs test/learning-progress.test.mjs test/route-planner.test.mjs test/generation-planning.test.mjs test/priority-learning.test.mjs test/offline-solvers.test.mjs test/adaptive-exploration.test.mjs test/trapped-timer.test.mjs test/audio-lifecycle.test.mjs test/search-performance.test.mjs test/butterfly-planning.test.mjs test/amoeba-planning.test.mjs",
     "build:sid": "node tools/build-sid.mjs",
     "playtest:original": "node tools/playtest-original.mjs"
   }

@@ -222,6 +222,8 @@ export function mountLearning({getContext,pause,onWatch,onTrainingPreview=()=>{}
    const playButton=button('PLAY',()=>{pause();onWatch(replayAttempt(record));},cell);playButton.setAttribute('aria-label',watchLabel);playButton.title=watchLabel;
    if(record.run.plannerRevision)playButton.title+=` · planned route · ${record.run.searchExpanded} search states · ${record.run.reusedPartials} remembered routes`;
    if(record.run.searchTacticalSteps)playButton.title+=` · ${record.run.searchTacticalSteps} tactical physics steps`;
+   if(record.run.searchAmoebaSteps)playButton.title+=` · ${record.run.searchAmoebaSteps} amoeba physics steps`;
+   if(record.run.amoebaPlanning)playButton.title+=` · amoeba ${record.run.amoebaPlanning.phase}, ${record.run.amoebaPlanning.size} cells, ${record.run.amoebaPlanning.openings} growth openings`;
    if(record.run.planningPriorities)playButton.title+=` · priority profile ${record.run.planningPriorities.profile} (${record.run.planningPriorities.kind}) · outcome quality ${record.run.priorityFitness.toFixed(2)}`;
    if(record.reconstructed)text('small','Verified reconstruction',cell);tbody.append(row);
   }
@@ -270,7 +272,7 @@ export function mountLearning({getContext,pause,onWatch,onTrainingPreview=()=>{}
      if(data.type==='progress'){
       const label={baseline:'Measuring untrained player',evaluation:'Measuring learned player',recovery:'Verifying earlier replays'}[data.phase]??`Training attempt ${data.attempt}`;
       if(preview&&searchRewinds&&data.phase==='training'&&data.previewInput)onTrainingPreview({type:'route',context,attempt:data.attempt,input:data.previewInput,decision:data.decision,branches:data.previewBranches,searchRewinds});
-      status.textContent=(data.frontier!==undefined?`${label}: ${data.decision} search states · best ${data.diamonds} diamonds · ${data.frontier} open branches.`:`${label}: ${data.diamonds} diamonds, ${data.ticks} steps.`)+(Number.isFinite(data.searchMs)?` Search ${(data.searchMs/1000).toFixed(1)} s.`:'');return;
+      status.textContent=(data.frontier!==undefined?`${label}: ${data.decision} search states · best ${data.diamonds} diamonds · ${data.frontier} open branches.`:`${label}: ${data.diamonds} diamonds, ${data.ticks} steps.`)+(data.amoeba?` Candidate amoeba: ${data.amoeba.phase}, ${data.amoeba.size} cells, ${data.amoeba.openings} growth openings.`:'')+(Number.isFinite(data.searchMs)?` Search ${(data.searchMs/1000).toFixed(1)} s.`:'');return;
      }
      if(data.type==='record'||data.type==='recovered'){
       const records=data.type==='record'?[learningReplay(context,data.kind,data.attempt,data.run)]:data.records.map(r=>learningReplay(context,r.kind,r.attempt,r.run,true));

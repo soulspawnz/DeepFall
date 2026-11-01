@@ -2,6 +2,18 @@
 
 These are engine-grounded planning recommendations, not a claim that a keyboard attempt cleared an amoeba cave or that the learning player has already learned these strategies. Direct play observations and inferred planning improvements must be reported separately. Private playtest screenshots and notes remain outside the repository.
 
+## Implemented planning support
+
+Planner revision 6 implements a conservative growth-region analysis, proposed rock fences, a bounded cap/retreat/conversion search, and escape forecasts. It counts dirt, vacated player cells, moving enemies, and falling objects as potential future growth space. Growth capacity is counted only up to the amoeba limit plus one: a value above the limit is a lower bound, not an exact region size. A bounded region must have enough potential yield; a merely bounded small colony is not confirmed diamonds.
+
+The planner first proposes a nearby work position through the real simulation. It considers rectangular fences around every current amoeba component, missing fence cells, rock feeds, lower shaft clearing, horizontal pushes, and settling. These rectangles are goals for search, never inserted walls. The event search keeps at most 48 states per layer for up to 96 layers, with additional bounded retreat and waiting work counted separately. A completed setup must survive a physics-tested retreat outside the growth pocket before waiting for conversion; surviving near an unbounded colony is not the same achievement.
+
+In the ordinary search, one in four expansions can pursue the fence objective while no verified containment or sufficient-supply branch has priority. A reference fence comes from the simulated approach, and work-site selection favors physical progress against that same objective. Up to twelve strategically distinct amoeba branches share the existing 64-trace frontier budget with the usual candidates. On later amoeba attempts, the first eight frontier traces are considered before rotation; duplicate prefixes are removed so they cannot consume the twelve-seed limit. Their actual inputs are replayed on the next attempt; they are not fabricated completed attempts or archive wins.
+
+Escape checks include growth and delayed gravity, reject an endpoint still threatened by a known pursuing fall, and require current exit connectivity. Their finite horizon is explicit; they do not prove permanent safety. Candidate phase, cell count, and growth openings appear in live progress. Saved runs include their final `amoebaPlanning` summary and `searchAmoebaSteps`; imports verify the summary against the replayed world. Learned action values, prior profiles, and old replay inputs remain compatible. The new expansion namespace also includes the fence objective, preventing an old expansion under a different objective from suppressing new work.
+
+`test/amoeba-planning.test.mjs` uses invented layouts to check unstable boundaries, insufficient yield, a real rock cap and diamond conversion, safe retreat, pursuing falls, full harvest/exit, and metadata integrity. Success on those fixtures does not establish that original G has been solved. The measured outcome of a live cave trial remains separate from these implementation checks.
+
 ## Survive the approach
 
 Evaluate entrance protection, birth, enemy movement, and the first escape together. The world advances during entrance warm-up; the nearest enemy in the initial layout may not be the nearest enemy when the player becomes vulnerable. Check every intermediate step of an approach, including idle steps and the retreat, rather than only the destination or diamond reward. An opening blast failure is evidence about the opening, not evidence about amoeba containment.

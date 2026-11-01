@@ -42,6 +42,8 @@ Planner revision 3 adds generation setup proposals. It prioritizes clearing a bl
 
 For the distinction between amoeba access, actual containment, sufficient conversion yield, and safe harvesting, see [amoeba planning priorities](AMOEBA_PLANNING.md). Dirt is a possible growth cell, not a containment wall. These recommendations are separate from implemented rewards and learned model data.
 
+Planner revision 6 adds the [implemented containment and escape support](AMOEBA_PLANNING.md#implemented-planning-support): bounded growth-region analysis, proposed rock fences, physics-tested setup/retreat sequences, and reserved search/frontier space for developing low-diamond preparations. Its amoeba multiplier rewards a sufficiently large bounded growth region, while actual diamond conversion and collection stay separate. Live progress reports candidate colony state; saved `amoebaPlanning` summaries are checked against engine replay on import. This support does not imply a guaranteed solution to original G.
+
 A partial result is the best candidate found within the search budget. Different searches can return the same incumbent, producing identical diamond and step counts. More route variety or higher exploration does not by itself establish progress.
 
 ## Auto exploration
