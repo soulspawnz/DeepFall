@@ -46,9 +46,9 @@ The card shows the active setting or previews the next attempt when idle. New tr
 
 ## Live rendering and branch arrows
 
-**Render training in game** animates candidate inputs at 30 engine steps per second. Search may switch routes and rewind to their shared prefix. A separate game instance preserves the paused manual cave. Stop or completion restores it. Preview audio is muted; hidden tabs do not block training while waiting for animation.
+**Render training in game** animates inputs at 30 engine steps per second. **Show search rewinds** defaults off: the canvas waits during planning, then plays each completed attempt continuously from its start. When enabled, it shows changing search candidates, including rewinds to shared prefixes. The preference persists locally, is disabled during a job, and affects display only; it neither changes learning nor spends or grants Echo gameplay rewinds. A separate game instance preserves the paused manual cave. Stop or completion restores it. Preview audio is muted; hidden tabs do not block training while waiting for animation.
 
-**SHOW BRANCHES** toggles lime lines for the most recent 60 consumed inputs, cyan arrows for up to 12 tested local continuations, and dashed red forecasts that ended in death. Continuations start at the candidate endpoint, outlined in cyan, which may be ahead of the animated player. Each draws at most 32 actual movement segments.
+**SHOW BRANCHES** toggles lime lines for the most recent 60 consumed inputs. When search rewinds are enabled, it also shows cyan arrows for up to 12 tested local continuations and dashed red forecasts that ended in death. Continuations start at the candidate endpoint, outlined in cyan, which may be ahead of the animated player. Each draws at most 32 actual movement segments.
 
 Lines use simulated player positions, including blocked moves and failed pushes. These are sampled options, not all open branches or promises of an exit. Only the recent route remains on the final chosen run. Normal keyboard play and saved replays do not show the overlay.
 

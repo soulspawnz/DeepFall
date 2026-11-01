@@ -81,7 +81,7 @@ const branchToggle=document.createElement('input');branchToggle.type='checkbox';
 function trainingFrame(data){
  if(!data){
   if(!trainingPreview)return;trainingPreview.resolve?.();trainingPreview=null;stopPreview.hidden=true;branchLabel.hidden=true;delete canvas.dataset.planningBranches;replayButton.closest('.console')?.classList.remove('training-active');
-  delete canvas.dataset.trainingPreview;delete canvas.dataset.trainingTick;delete canvas.dataset.trainingAttempt;delete canvas.dataset.trainingCandidate;
+  delete canvas.dataset.trainingPreview;delete canvas.dataset.trainingTick;delete canvas.dataset.trainingAttempt;delete canvas.dataset.trainingCandidate;delete canvas.dataset.trainingStyle;
   replayCaption.hidden=true;accumulator=0;sync();return;
  }
  if(document.hidden){if(trainingPreview)trainingFrame(null);return;}
@@ -90,7 +90,8 @@ function trainingFrame(data){
  if(data.type==='start'){
   const first=!trainingPreview;trainingPreview?.resolve?.();
   const previewGame=new Game(selected,'classic',null,{...data.context,fastTrappedTimer:true});previewGame.start();
-  trainingPreview={game:previewGame,input:[],tick:0,states:[cloneGame(previewGame)],clock:0,attempt:data.attempt,candidate:0};
+  trainingPreview={game:previewGame,input:[],tick:0,states:[cloneGame(previewGame)],clock:0,attempt:data.attempt,candidate:0,searchRewinds:Boolean(data.searchRewinds)};
+  canvas.dataset.trainingStyle=data.searchRewinds?'search':'smooth';
   canvas.dataset.trainingPreview='true';stopPreview.hidden=false;branchLabel.hidden=false;replayButton.closest('.console')?.classList.add('training-active');held=[];snap=false;replay=null;replayButton.textContent='WATCH PLAYTESTS';
   if(first)canvas.scrollIntoView({block:'center',behavior:'smooth'});sync();return;
  }
@@ -218,8 +219,10 @@ function sync() {
   if(trainingPreview){
    $('overlay').hidden=true;$('pause').disabled=$('rewind').disabled=true;
    const p=trainingPreview;$('status-text').textContent=`LIVE TRAINING · ATTEMPT ${p.attempt} · ${p.final?'CHOSEN RUN':'SEARCH CANDIDATE '+p.candidate}`;
+   if(!p.searchRewinds)$('status-text').textContent=`TRAINING · ATTEMPT ${p.attempt} · ${p.final?'CONTINUOUS PLAYBACK':'PLANNING'}`;
    replayCaption.hidden=false;replayCaption.textContent=p.final?`Training attempt ${p.attempt} · chosen run · recorded outcome: ${p.outcome==='won'?'escaped':p.outcome==='dead'?'died':'attempt limit'}`:`Live training search · attempt ${p.attempt} · candidate ${p.candidate} · branches can rewind or change`;
-   if(branchToggle.checked)replayCaption.textContent+=p.final?' · lime: recent route':' · lime: recent route · cyan: tested options at candidate endpoint · dashed red: ended in death';
+   if(!p.searchRewinds)replayCaption.textContent=p.final?`Training attempt ${p.attempt} · continuous completed-run playback · recorded outcome: ${p.outcome==='won'?'escaped':p.outcome==='dead'?'died':'attempt limit'}`:`Planning attempt ${p.attempt} · search rewinds hidden · the completed attempt will play continuously`;
+   if(branchToggle.checked&&(p.searchRewinds||p.final))replayCaption.textContent+=p.final?' · lime: recent route':' · lime: recent route · cyan: tested options at candidate endpoint · dashed red: ended in death';
    return;
   }
   $('overlay').hidden = game.status === 'playing';

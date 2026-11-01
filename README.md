@@ -48,7 +48,7 @@ One emulated three-voice chip handles all synthesis. This is a browser adaptatio
 
 1. Select a campaign, cave, and difficulty.
 2. Choose **1, 5, 10, 25, 50, or 100** attempts and **Auto** exploration, or a fixed percentage.
-3. Click **TRAIN PLAYER**. **Render training in game** is enabled by default; uncheck it for background training.
+3. Click **TRAIN PLAYER**. **Render training in game** is enabled by default; uncheck it for background training. **Show search rewinds** defaults off for smooth playback of each completed attempt; enable it to watch changing search candidates.
 4. Inspect **Graphs** or **Replays**, or use **WATCH BEST RUN** / **WATCH BEST PROGRESS**.
 
 During live training, **SHOW BRANCHES** toggles the planning overlay:
@@ -59,7 +59,7 @@ During live training, **SHOW BRANCHES** toggles the planning overlay:
 | Cyan | Sampled, physics-tested continuations at the candidate endpoint |
 | Dashed red | Tested alternatives that ended in death |
 
-The outlined endpoint can be ahead of the animated player. Search may rewind or change candidates; these previews are not one continuous playthrough. Up to 12 local alternatives appear, rather than the whole search tree. The final chosen run is labeled separately. The manual cave stays paused and is restored afterward.
+With **Show search rewinds** enabled, the outlined endpoint can be ahead of the animated player. Search may rewind or change candidates; these previews are not one continuous playthrough. Up to 12 local alternatives appear, rather than the whole search tree. With it off, the canvas waits while planning and then plays the completed attempt continuously, showing only its recent route. This preference is remembered and does not change the learned inputs or give the player Echo rewind charges. The manual cave stays paused and is restored afterward.
 
 Auto starts at 25% and reviews progress every five completed training attempts, within a 10–60% range. It can favor reliable routes or broaden a stalled search. Evaluation runs do not count as training successes. **STOP TRAINING** keeps completed attempts; unfinished attempts are not saved as completed runs.
 
