@@ -122,7 +122,7 @@ export function mountLearning({getContext,pause,onWatch,onTrainingPreview=()=>{}
  const exploreInfo=text('p','',training);exploreInfo.id='learning-exploration';exploreInfo.className='learning-exploration-note';exploreInfo.setAttribute('aria-live','polite');let activeExploration=null;
  explore.addEventListener('change',()=>{try{localStorage.setItem('deepfall.exploration-mode',explore.value);}catch{}renderExploration();});
  function button(label,fn,parent=controls){const b=text('button',label,parent);b.addEventListener('click',fn);return b;}
- let worker=null,saved=null,loadedKey='',ready=false,loadPromise=Promise.resolve(),generation=0,historyGeneration=0,page=0,history={total:0,training:0,records:[]},pendingSave=Promise.resolve(),activePriorities=null;
+ let worker=null,saved=null,loadedKey='',ready=false,loadPromise=Promise.resolve(),generation=0,historyGeneration=0,page=0,history={total:0,training:0,records:[]},pendingSave=Promise.resolve(),activePriorities=null,lastTrainingSearchMs=null;
  const actions=document.createElement('div');actions.className='learning-controls learning-actions';training.append(actions);
  const previewLabel=text('label','',training);previewLabel.className='learning-preview-toggle';const previewToggle=document.createElement('input');previewToggle.type='checkbox';previewToggle.checked=true;previewToggle.setAttribute('aria-label','Render training in game');previewLabel.append(previewToggle,document.createTextNode(' Render training in game'));
  const rewindsLabel=text('label','',training);rewindsLabel.className='learning-preview-toggle';const rewindsToggle=document.createElement('input');rewindsToggle.type='checkbox';try{rewindsToggle.checked=localStorage.getItem('deepfall.learning.search-rewinds')==='true';}catch{}rewindsToggle.setAttribute('aria-label','Show search rewinds');rewindsToggle.title='Show changing search candidates. Turn off to play completed attempts continuously.';rewindsLabel.append(rewindsToggle,document.createTextNode(' Show search rewinds'));
@@ -259,7 +259,7 @@ export function mountLearning({getContext,pause,onWatch,onTrainingPreview=()=>{}
   if(worker||importing)return;await load();if(!ready||worker||importing)return;
   const context={...getContext()},key=contextKey(context);if(key!==loadedKey)return;pause();
   try{
-   const job=new Worker(new URL('./learning-worker.mjs',import.meta.url),{type:'module'}),preview=type==='train'&&previewToggle.checked,searchRewinds=rewindsToggle.checked;worker=job;activeExploration=null;activePriorities=null;render();
+   const job=new Worker(new URL('./learning-worker.mjs',import.meta.url),{type:'module'}),preview=type==='train'&&previewToggle.checked,searchRewinds=rewindsToggle.checked;worker=job;activeExploration=null;activePriorities=null;lastTrainingSearchMs=null;render();
    status.textContent=type==='recover'?'Verifying earlier replay inputs…':watch?'Planning an exploratory attempt to watch…':'Training in simulation…';
    job.onmessage=async({data})=>{
     if(worker!==job)return;
@@ -269,20 +269,21 @@ export function mountLearning({getContext,pause,onWatch,onTrainingPreview=()=>{}
      if(data.type==='progress'){
       const label={baseline:'Measuring untrained player',evaluation:'Measuring learned player',recovery:'Verifying earlier replays'}[data.phase]??`Training attempt ${data.attempt}`;
       if(preview&&searchRewinds&&data.phase==='training'&&data.previewInput)onTrainingPreview({type:'route',context,attempt:data.attempt,input:data.previewInput,decision:data.decision,branches:data.previewBranches,searchRewinds});
-      status.textContent=data.frontier!==undefined?`${label}: ${data.decision} search states · best ${data.diamonds} diamonds · ${data.frontier} open branches.`:`${label}: ${data.diamonds} diamonds, ${data.ticks} steps.`;return;
+      status.textContent=(data.frontier!==undefined?`${label}: ${data.decision} search states · best ${data.diamonds} diamonds · ${data.frontier} open branches.`:`${label}: ${data.diamonds} diamonds, ${data.ticks} steps.`)+(Number.isFinite(data.searchMs)?` Search ${(data.searchMs/1000).toFixed(1)} s.`:'');return;
      }
      if(data.type==='record'||data.type==='recovered'){
       const records=data.type==='record'?[learningReplay(context,data.kind,data.attempt,data.run)]:data.records.map(r=>learningReplay(context,r.kind,r.attempt,r.run,true));
       pendingSave=saveLearningRecords(context,data.saved,records);await pendingSave;
       if(worker!==job)return;saved=data.saved;await refreshHistory();
-      status.textContent=data.type==='recovered'?'Earlier replays recovered and fingerprint-verified.':`${data.kind==='training'?`Attempt ${data.attempt}`:data.kind}: replay and learning saved.`;
+      if(data.kind==='training'&&Number.isFinite(data.searchMs))lastTrainingSearchMs=data.searchMs;
+      status.textContent=data.type==='recovered'?'Earlier replays recovered and fingerprint-verified.':`${data.kind==='training'?`Attempt ${data.attempt}`:data.kind}: replay and learning saved.`+(data.kind==='training'&&Number.isFinite(data.searchMs)?` Search ${(data.searchMs/1000).toFixed(1)} s.`:'');
       if(preview&&data.type==='record'&&data.kind==='training')await onTrainingPreview({type:'route',context,attempt:data.attempt,input:data.run.input,final:true,status:data.run.status,searchRewinds});
       if(worker!==job)return;
       job.postMessage({type:'ack',id:data.id});
       if(data.type==='record'&&data.watch&&data.kind==='training'&&!preview)onWatch(replayAttempt(records[0]));
      }
      if(data.type==='done'||data.type==='error'){
-      job.terminate();worker=null;onTrainingPreview(null);status.textContent=data.type==='error'?`Training stopped: ${data.message}`:data.recovered?'Earlier replays recovered and verified.':'Training finished. All completed replays saved.';render();
+      job.terminate();worker=null;onTrainingPreview(null);status.textContent=data.type==='error'?`Training stopped: ${data.message}`:data.recovered?'Earlier replays recovered and verified.':'Training finished. All completed replays saved.'+(lastTrainingSearchMs===null?'':` Last training search: ${(lastTrainingSearchMs/1000).toFixed(1)} s.`);render();
      }
     }catch(error){job.terminate();worker=null;onTrainingPreview(null);ready=false;status.textContent=`Could not save replay: ${error.message}. Training stopped; existing records are preserved.`;render();}
    };

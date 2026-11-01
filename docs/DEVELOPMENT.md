@@ -54,6 +54,8 @@ All paths above are under `test/`. Headless browser checks use isolated browser 
 
 The [verification guide](VERIFICATION.md) distinguishes automated archive results, regression tests, visible search previews, and recorded keyboard runs.
 
+For CPU profiling and before/after measurements from exported model copies, see [search performance](PERFORMANCE.md). Keep benchmark jobs sequential and compare behavior hashes, not only runtime.
+
 ## Planner continuation
 
 Back up the selected model and the replay archive through the UI before continuing a user's learning outside the browser:

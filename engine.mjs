@@ -239,12 +239,16 @@ export class Game {
     }
     let playerMoved=false, amoebaSize=0, amoebaEnclosed=true;
     for (let y = 0; y < this.grid.length; y++) for (let x = 0; x < this.grid[y].length; x++) {
-      if(this.original && this.occupied(x,y) && !playerMoved) {
+      if(this.original && !playerMoved && this.occupied(x,y)) {
         this.move(input.dx ?? 0,input.dy ?? 0,Boolean(input.snap)); playerMoved=true;
         if(this.status==='won') return;
       }
+      const tile = this.grid[y][x];
+      // Player processing must stay above this fast path: moving or snapping
+      // can change the scanned cell. Only loose objects, enemies and amoeba
+      // have per-cell physics; inert terrain needs no moved-set lookup.
+      if(!isLoose(tile)&&!isEnemy(tile)&&tile!=='a')continue;
       if (moved.has(key(x, y))) continue;
-      const tile = this.tile(x, y);
       if (isLoose(tile)) {
         const wasFalling = this.falling.has(key(x, y));
         const below = this.tile(x, y + 1);

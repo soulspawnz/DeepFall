@@ -81,5 +81,6 @@ All 100 original cave/difficulty layouts and parameters match the pinned referen
 - [Graphics, sound sources, and attribution](docs/ORIGINAL_MEDIA.md)
 - [jsSID/reSID license](vendor/jssid/LICENSE.md)
 - [Development, testing, and deployment](docs/DEVELOPMENT.md)
+- [Search profiling and performance benchmarks](docs/PERFORMANCE.md)
 
 Original Boulder Dash designs, art, and sound remain attributable to their creators and rights holders. Bundling reference assets does not assert new ownership or a blanket license over them. The full original game executable is not included.

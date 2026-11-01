@@ -1,15 +1,15 @@
 import {LearningPlayer,recoverLearningReplays,adaptiveExploration} from './learning-player.mjs';
 import {choosePlanningPriorities} from './route-planner.mjs';
-let cancelled=false,acknowledge=null,serial=0,waiting=0;
+let cancelled=false,acknowledge=null,serial=0,waiting=0,lastSearchMs=0;
 const summary=run=>{const {input,...result}=run;return result;};
 function publish(data){return new Promise(resolve=>{waiting=++serial;acknowledge=resolve;self.postMessage({...data,id:waiting});});}
 async function consume(generator,phase,attempt){
- let step;
+ let step;const started=performance.now();
  do{
   step=generator.next();
-  if(!step.done&&(step.value.frontier!==undefined||step.value.decision%8===0)){self.postMessage({type:'progress',phase,attempt,...step.value});await new Promise(resolve=>setTimeout(resolve,0));}
+  if(!step.done&&(step.value.frontier!==undefined||step.value.decision%8===0)){self.postMessage({type:'progress',phase,attempt,...step.value,searchMs:performance.now()-started});await new Promise(resolve=>setTimeout(resolve,0));}
  }while(!step.done&&!cancelled);
- return step.done?step.value:null;
+ lastSearchMs=performance.now()-started;return step.done?step.value:null;
 }
 self.onmessage=async({data})=>{
  if(data.type==='ack'){if(data.id===waiting){const done=acknowledge;acknowledge=null;done?.();}return;}
@@ -39,7 +39,7 @@ self.onmessage=async({data})=>{
    if(!run||cancelled)break;
    const metadata={explorationMode:automatic?'auto':'manual',explorationReason:choice.reason};Object.assign(run,metadata);Object.assign(player.results.at(-1),metadata);
    if(automatic)player.autoExploration=adaptiveExploration(player);
-   await publish({type:'record',kind:'training',attempt:player.attempts,run,saved:player.export(),watch:Boolean(data.watch)});
+   await publish({type:'record',kind:'training',attempt:player.attempts,run,saved:player.export(),watch:Boolean(data.watch),searchMs:lastSearchMs});
   }
   if(!cancelled){
    const run=await consume(player.attempt({learn:false}),'evaluation',player.attempts);

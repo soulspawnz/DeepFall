@@ -54,27 +54,26 @@ export function generationTargets(g){
 const distanceCache=new Map();
 function goalDistances(g){
  const exit=g.collected>=g.target,key=+exit+':'+(g.magic.remaining>0)+':'+g.grid.map(r=>r.join('')).join('');
- if(distanceCache.has(key))return distanceCache.get(key);
+ const cached=distanceCache.get(key);if(cached!==undefined)return cached;
  const width=g.grid[0].length,height=g.grid.length,d=new Float64Array(width*height).fill(Infinity),queue=[];
  const goal=exit?'X':g.grid.some(r=>r.includes('*'))?'*':'b';
- for(let y=0;y<height;y++)for(let x=0;x<width;x++)if(g.tile(x,y)===goal){d[y*width+x]=0;queue.push([x,y]);}
- if(!exit&&!queue.length)for(const cell of generationTargets(g).keys()){const [x,y]=cell.split(',').map(Number);d[y*width+x]=0;queue.push([x,y]);}
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++)if(g.grid[y][x]===goal){d[y*width+x]=0;queue.push(y*width+x);}
+ if(!exit&&!queue.length)for(const cell of generationTargets(g).keys()){const [x,y]=cell.split(',').map(Number);d[y*width+x]=0;queue.push(y*width+x);}
  for(let i=0;i<queue.length;i++){
-  const [x,y]=queue[i];
-  for(const [dx,dy]of dirs){const xx=x+dx,yy=y+dy,t=g.tile(xx,yy),k=yy*width+xx;if(xx<0||yy<0||xx>=width||yy>=height||['#','+','M','a'].includes(t))continue;const value=d[y*width+x]+(t==='O'?4:1);if(value<d[k]){d[k]=value;queue.push([xx,yy]);}}
+  const cell=queue[i],x=cell%width,y=Math.floor(cell/width);
+  for(const [dx,dy]of dirs){const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=width||yy>=height)continue;const t=g.grid[yy][xx]??'#',k=yy*width+xx;if(t==='#'||t==='+'||t==='M'||t==='a')continue;const value=d[cell]+(t==='O'?4:1);if(value<d[k]){d[k]=value;queue.push(k);}}
  }
  distanceCache.set(key,d);if(distanceCache.size>256)distanceCache.delete(distanceCache.keys().next().value);return d;
 }
 export function planningKey(g){
- const s=g.snapshot();delete s.remaining;delete s.tick;delete s.trappedFor;delete s.score;
- if(!g.grid.some(r=>r.includes('a')))s.amoeba={dead:null,slow:0};
- // An idle wall with activation time left differs from an expired wall.
- return JSON.stringify(s);
+ // Preserve the snapshot key's property order and exact bytes without making
+ // a deep world copy. Serialization reads the state synchronously.
+ return JSON.stringify({grid:g.grid,player:g.player,collected:g.collected,falling:[...g.falling],facings:[...g.facings],blasts:[...g.blasts],magic:g.magic,amoeba:g.grid.some(r=>r.includes('a'))?g.amoeba:{dead:null,slow:0},randomState:g.randomState,born:g.born,birthRemaining:g.birthRemaining,playerAlive:g.playerAlive});
 }
 const criticalCache=new WeakMap();
-function corridorTargets(g){
+function corridorTargets(g,distances=undefined){
  if(criticalCache.has(g))return criticalCache.get(g);
- const distances=goalDistances(g),distance=p=>Math.min(100,distances[p.y*g.grid[0].length+p.x]);
+ distances??=goalDistances(g);const distance=p=>Math.min(100,distances[p.y*g.grid[0].length+p.x]);
  const critical=new Set();let cursor={...g.player};const traced=new Set();
  for(let n=0;n<160;n++){
   const k=`${cursor.x},${cursor.y}`;if(traced.has(k)||distance(cursor)===0)break;traced.add(k);
@@ -88,8 +87,8 @@ function corridorTargets(g){
  }
  criticalCache.set(g,critical);return critical;
 }
-function paths(g,w){
- const q=[{...g.player,path:[]}],seen=new Set([`${g.player.x},${g.player.y}`]),goals=[],pushes=[],critical=corridorTargets(g),setups=generationTargets(g);
+function paths(g,w,facts){
+ const q=[{...g.player,path:[]}],seen=new Set([`${g.player.x},${g.player.y}`]),goals=[],pushes=[],critical=facts.critical,setups=facts.setups;
  const distances=goalDistances(g),distance=p=>Math.min(100,distances[p.y*g.grid[0].length+p.x]);
  for(let i=0;i<q.length;i++){
   const p=q[i],tile=g.tile(p.x,p.y);
@@ -116,12 +115,13 @@ function paths(g,w){
 }
 function trace(node){const chunks=[];for(let n=node;n;n=n.parent)chunks.push(n.actions);return chunks.reverse().flat();}
 function mobility(g){let n=0;for(const [dx,dy]of dirs)if([' ','.','*','X'].includes(g.tile(g.player.x+dx,g.player.y+dy)))n++;return n;}
-export function planningPriority(g,length,w=PRIORITY_DEFAULTS){
- let available=0;for(const row of g.grid)for(const t of row)if(t==='*'||t==='d')available++;
- const distance=Math.min(100,goalDistances(g)[g.player.y*g.grid[0].length+g.player.x]);
- let preparation=0;for(const cell of corridorTargets(g)){const [x,y]=cell.split(',').map(Number);preparation=Math.max(preparation,Math.max(0,3-Math.abs(x-g.player.x)-Math.abs(y-g.player.y))*60);}
- for(const [cell,setup]of generationTargets(g)){const [x,y]=cell.split(',').map(Number);preparation=Math.max(preparation,Math.max(0,5-Math.abs(x-g.player.x)-Math.abs(y-g.player.y))*(setup.kind==='magic-outlet'?80:50));}
- const pending=g.amoeba.dead==='*'?g.grid.reduce((n,r)=>n+r.filter(t=>t==='a').length,0):0;
+export function planningPriority(g,length,w=PRIORITY_DEFAULTS,facts=null){
+ let available=facts?.available??0;if(!facts)for(const row of g.grid)for(const t of row)if(t==='*'||t==='d')available++;
+ const distance=facts?.distance??Math.min(100,goalDistances(g)[g.player.y*g.grid[0].length+g.player.x]);
+ let preparation=facts?.preparation??0;
+ if(!facts){for(const cell of corridorTargets(g)){const [x,y]=cell.split(',').map(Number);preparation=Math.max(preparation,Math.max(0,3-Math.abs(x-g.player.x)-Math.abs(y-g.player.y))*60);}
+ for(const [cell,setup]of generationTargets(g)){const [x,y]=cell.split(',').map(Number);preparation=Math.max(preparation,Math.max(0,5-Math.abs(x-g.player.x)-Math.abs(y-g.player.y))*(setup.kind==='magic-outlet'?80:50));}}
+ const pending=facts?.pending??(g.amoeba.dead==='*'?g.grid.reduce((n,r)=>n+r.filter(t=>t==='a').length,0):0);
  const needed=Math.max(0,g.target-g.collected);
  const pushes=[-1,1].filter(dx=>g.tile(g.player.x+dx,g.player.y)==='O'&&g.tile(g.player.x+2*dx,g.player.y)===' ').length;
  return Math.min(g.collected,g.target)*2000*w.collection+Math.min(available,needed)*300*w.supply+Math.min(pending,needed)*250*w.amoeba-length*2*w.speed+mobility(g)*3*w.mobility-distance*12*w.distance+preparation*w.preparation+(w.push-1)*80*pushes;
@@ -152,16 +152,16 @@ function scout(context,pass,fixture,fastTrappedTimer){
  }
  return input;
 }
-function escapeRoutes(g,w){
+function escapeRoutes(g,w,getKey,analyze){
  let beam=[{g,path:[]}];const seen=new Set();
  for(let depth=0;depth<8;depth++){
   const next=[];
   for(const node of beam)for(const a of ACTIONS){
    const copy=cloneGame(node.g);copy.step({dx:a[0],dy:a[1],snap:Boolean(a[2])});if(copy.status==='dead')continue;
-   const key=planningKey(copy);if(seen.has(key))continue;seen.add(key);
+   const key=getKey(copy);if(seen.has(key))continue;seen.add(key);
    const path=[...node.path,[a[0],a[1],Boolean(a[2])]];
    if(copy.status==='won')return [{g:copy,path}];
-   next.push({g:copy,path,value:planningPriority(copy,path.length,w)});
+   next.push({g:copy,path,value:planningPriority(copy,path.length,w,analyze(copy))});
   }
   next.sort((a,b)=>b.value-a.value);beam=next.slice(0,16);if(!beam.length)break;
  }
@@ -172,17 +172,35 @@ function escapeRoutes(g,w){
 export function* planRoute(context,{seed=1,maxNodes=1800,maxTicks=1800,prefixes=[],fixture=null,fastTrappedTimer=true,guide=()=>0,visited=[],exploration=.25,weights=PRIORITY_DEFAULTS}={}){
  if(!validPriorityWeights(weights))throw new Error('Invalid planning-priority weights.');
  const namespace='s4:'+priorityProfile(weights)+':';
+ // These caches are local to an immutable search graph, never attached to a
+ // live Game. Every successor is stepped before it enters the caches.
+ const keys=new WeakMap(),worlds=new WeakMap(),emptySetups=new Map();
+ function getKey(g){let key=keys.get(g);if(key===undefined){key=planningKey(g);keys.set(g,key);}return key;}
+ function world(g){
+  let f=worlds.get(g);if(f)return f;
+  let available=0,amoeba=0,butterflies=0,magic=false;
+  for(const row of g.grid)for(const t of row){if(t==='*'||t==='d')available++;else if(t==='a')amoeba++;else if(t==='b')butterflies++;else if(t==='M')magic=true;}
+  f={available,pending:g.amoeba.dead==='*'?amoeba:0,amoeba,magic,potential:amoeba||magic?Infinity:g.collected+available+butterflies*9};worlds.set(g,f);return f;
+ }
+ function analyze(g){
+  const f=world(g);if(f.analyzed)return f;
+  const distances=goalDistances(g);f.critical=corridorTargets(g,distances);f.setups=f.amoeba||f.magic?generationTargets(g):emptySetups;
+  f.distance=Math.min(100,distances[g.player.y*g.grid[0].length+g.player.x]);f.preparation=0;
+  for(const cell of f.critical){const [x,y]=cell.split(',').map(Number);f.preparation=Math.max(f.preparation,Math.max(0,3-Math.abs(x-g.player.x)-Math.abs(y-g.player.y))*60);}
+  for(const [cell,setup]of f.setups){const [x,y]=cell.split(',').map(Number);f.preparation=Math.max(f.preparation,Math.max(0,5-Math.abs(x-g.player.x)-Math.abs(y-g.player.y))*(setup.kind==='magic-outlet'?80:50));}
+  f.analyzed=true;return f;
+ }
  const start=new Game(context.index,'classic',fixture,{...context,fastTrappedTimer});start.start();
  const birth=[];while(!start.born&&start.status==='playing'){start.step();birth.push([0,0,false]);}
- const root={g:start,parent:null,actions:birth,length:birth.length};root.value=planningPriority(start,root.length,weights);
- const open=[root],seen=new Map([[planningKey(start),root.length]]);let best=root,expanded=0;
+ const root={g:start,parent:null,actions:birth,length:birth.length};root.value=planningPriority(start,root.length,weights,analyze(start));
+ const open=[root],seen=new Map([[getKey(start),root.length]]);let best=root,expanded=0;
  const completed=new Map(visited);
  function add(g,parent,actions){
-  if(!actions.length||g.status==='dead'||diamondPotential(g)<g.target||(mobility(g)===0&&g.isTrapped()))return;
+  if(!actions.length||g.status==='dead'||world(g).potential<g.target||(mobility(g)===0&&g.isTrapped()))return;
   const length=(parent?.length??0)+actions.length;if(length>maxTicks)return;
-  const node={g,parent,actions,length,value:planningPriority(g,length,weights)};
+  const node={g,parent,actions,length,value:planningPriority(g,length,weights,analyze(g))};
   if(g.collected>best.g.collected||(g.collected===best.g.collected&&node.value>best.value))best=node;
-  const key=planningKey(g),prior=seen.get(key);if(prior!==undefined&&prior<=length)return;
+  const key=getKey(g),prior=seen.get(key);if(prior!==undefined&&prior<=length)return;
   if((completed.get(namespace+stateHash(key))??Infinity)<=length)return;
   seen.set(key,length);open.push(node);
  }
@@ -207,10 +225,10 @@ export function* planRoute(context,{seed=1,maxNodes=1800,maxTicks=1800,prefixes=
   const breadthEvery=exploration>0?Math.round(1/Math.max(.05,Math.min(.8,exploration)))+1:Infinity;
   let pick=0;if(expanded%breadthEvery===breadthEvery-1){let shortest=Infinity;for(let i=0;i<open.length;i++)if(open[i].length<shortest){shortest=open[i].length;pick=i;}}
   const [node]=open.splice(pick,1),g=node.g;
-  const fingerprint=namespace+stateHash(planningKey(g));if((completed.get(fingerprint)??Infinity)<=node.length)continue;
+  const fingerprint=namespace+stateHash(getKey(g));if((completed.get(fingerprint)??Infinity)<=node.length)continue;
   completed.set(fingerprint,node.length);
   if(g.status==='won')return {game:g,input:trace(node),expanded,seed,finished:true};
-  const routes=paths(g,weights);
+  const routes=paths(g,weights,analyze(g));
   for(const a of ACTIONS)routes.push([[a[0],a[1],Boolean(a[2])]]);
   routes.push(Array.from({length:4},()=>[0,0,false]));
   if(g.grid.some(r=>r.includes('a')))for(const ticks of [8,32])routes.push(Array.from({length:ticks},()=>[0,0,false]));
@@ -234,7 +252,7 @@ export function* planRoute(context,{seed=1,maxNodes=1800,maxTicks=1800,prefixes=
    if(points.length>1){const key=JSON.stringify(points);if(!branchChoices.has(key))branchChoices.set(key,{points,dead:next.status==='dead'});}
    const count=open.length;add(next,node,actual);if(open.length>count)open.at(-1).value+=Math.max(-10,Math.min(10,guide(g,route)));
    if(next.status==='playing'&&next.falling.has(`${next.player.x},${next.player.y-1}`)){
-    for(const escape of escapeRoutes(next,weights)){
+    for(const escape of escapeRoutes(next,weights,getKey,analyze)){
      const actions=[...actual,...escape.path];
      if(escape.g.status==='won')return {game:escape.g,input:[...trace(node),...actions],expanded:expanded+1,seed,finished:true};
      add(escape.g,node,actions);

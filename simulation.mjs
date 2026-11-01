@@ -5,8 +5,12 @@ export const ACTIONS=[[0,-1],[1,0],[0,1],[-1,0],[0,0],[0,-1,true],[1,0,true],[0,
 // A simulation must never share mutable physics state with its parent.
 export function cloneGame(game) {
  const copy=Object.create(Game.prototype);Object.assign(copy,game);
- const state=game.snapshot();Object.assign(copy,state);
- copy.falling=new Set(state.falling);copy.facings=new Map(state.facings);copy.blasts=new Map(state.blasts);
+ // Copy mutable physics fields directly; snapshot() would allocate temporary
+ // arrays and a second object only to wrap those collections again.
+ copy.grid=game.grid.map(row=>[...row]);copy.player={...game.player};
+ copy.magic={...game.magic};copy.amoeba={...game.amoeba};
+ copy.falling=new Set(game.falling);copy.facings=new Map(game.facings);
+ copy.blasts=new Map();for(const [cell,blast]of game.blasts)copy.blasts.set(cell,{...blast});
  copy.history=[];copy.events=[];
  return copy;
 }
