@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title description">
+  <title id="title">Deepfall — One more diamond. One wrong move.</title>
+  <desc id="description">Lime lettering above a descending pixel cave, with boulders and a diamond. A browser cave puzzle inspired by Commodore 64 Boulder Dash.</desc>
+  <rect width="1280" height="640" fill="#101611"/>
+  <path d="M0 448h224v32h192v32h192v32h192v32h192v32h288v32H0z" fill="#192115"/>
+  <g stroke="#303c2e" fill="none">
+    <path d="M64 64h1152v512H64z"/>
+    <path d="M96 112h1088M96 528h1088"/>
+  </g>
+  <text x="112" y="172" fill="#889487" font-family="monospace" font-size="15" letter-spacing="5">BOULDER DASH / COMMODORE 64</text>
+  <text x="108" y="295" fill="#d5eb83" font-family="monospace" font-weight="bold" font-size="100" letter-spacing="-5">DEEPFALL</text>
+  <text x="112" y="354" fill="#e4e9df" font-family="sans-serif" font-size="27">One more diamond. One wrong move.</text>
+  <text x="112" y="490" fill="#889487" font-family="monospace" font-size="15" letter-spacing="2">DIG DEEP. THINK AHEAD. FIND YOUR WAY OUT.</text>
+  <g shape-rendering="crispEdges">
+    <path d="M944 224h48v8h8v40h-8v8h-48v-8h-8v-40h8z" fill="#728c49"/>
+    <path d="M944 232h32v8h-24v24h-8z" fill="#b1ce6d"/>
+    <path d="M1032 304h48v8h8v40h-8v8h-48v-8h-8v-40h8z" fill="#728c49"/>
+    <path d="M1032 312h32v8h-24v24h-8z" fill="#b1ce6d"/>
+    <path d="M1096 400h48l16 24-40 48-40-48z" fill="#d5eb83"/>
+    <path d="m1096 400 8 24 16 48-40-48zm48 0-8 24h24z" fill="#91b858"/>
+    <path d="M952 296h8v24h-8zm16 8h8v24h-8zm72 72h8v24h-8z" fill="#3c5030"/>
+    <path d="M912 352h88v8h-88zm80 80h72v8h-72zm88 56h80v8h-80z" fill="#4e6938"/>
+  </g>
+</svg>

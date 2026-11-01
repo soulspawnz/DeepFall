@@ -1,6 +1,12 @@
+[![Deepfall — One more diamond. One wrong move.](artwork/banner.svg)](https://soulspawnz.github.io/DeepFall/)
+
 # Deepfall
 
-[Play online](https://soulspawnz.github.io/DeepFall/)
+## [▶ Play Deepfall online](https://soulspawnz.github.io/DeepFall/)
+
+[![Deepfall gameplay — dig for diamonds, dodge falling rocks, and find the exit. Click to play online.](artwork/play-online.png)](https://soulspawnz.github.io/DeepFall/)
+
+**Click the screenshot or heading to play in your browser. No installation required.**
 
 A browser cave puzzle game inspired by C64 Boulder Dash: dig through dirt, collect enough diamonds, and reach the exit without being crushed. Original sprite geometry appears in green on black, with sound synthesized by a bundled reSID emulator.
 
