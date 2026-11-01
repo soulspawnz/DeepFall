@@ -1,4 +1,4 @@
-import {Game} from './engine.mjs';
+import {Game,STEP} from './engine.mjs';
 import {ACTIONS,cloneGame} from './simulation.mjs';
 const amoebaDirs=ACTIONS.slice(0,4),cell=(x,y)=>`${x},${y}`;
 const loose=g=>g.grid.reduce((n,r)=>n+r.filter(t=>t==='*'||t==='d').length,0);
@@ -60,9 +60,38 @@ export function amoebaTargets(g,fence=amoebaFence(g)){
  return targets;
 }
 
+// Vertex cuts follow existing rock boundaries instead of requiring a rectangle.
+// Feed costs only propose a cut; shared rocks and gravity are resolved by play.
+export function amoebaCutFence(g){
+ const s=amoebaState(g);if(!s.size||g.amoeba.dead)return null;
+ const nodes=[],colony=[];g.grid.forEach((r,y)=>r.forEach((t,x)=>{if(t==='a')colony.push([x,y]);if(!barrier(g,x,y))nodes.push([x,y]);}));
+ const indices=new Map(nodes.map((p,i)=>[cell(...p),i])),costs=new Map();
+ for(const p of providers(g,nodes)){const k=cell(...p.hole);costs.set(k,Math.min(costs.get(k)??60,1+p.cost));}
+ const distance=nodes.map(([x,y])=>Math.min(...colony.map(([xx,yy])=>Math.abs(x-xx)+Math.abs(y-yy))));let best=null;
+ for(const inner of [0,1,2,3])for(const outer of [4,6,8,10]){
+  if(outer<=inner+1)continue;const N=nodes.length*2+2,S=N-2,T=N-1,adj=Array.from({length:N},()=>[]),INF=1e6;
+  const edge=(u,v,c)=>{const a={v,c,r:adj[v].length},b={v:u,c:0,r:adj[u].length};adj[u].push(a);adj[v].push(b);};
+  nodes.forEach(([x,y],i)=>{edge(i*2,i*2+1,distance[i]<=inner?INF:costs.get(cell(x,y))??60);if(distance[i]<=inner)edge(S,i*2,INF);if(distance[i]>=outer)edge(i*2+1,T,INF);for(const[dx,dy]of amoebaDirs){const j=indices.get(cell(x+dx,y+dy));if(j!==undefined)edge(i*2+1,j*2,INF);}});
+  let flow=0;
+  for(;;){const level=Array(N).fill(-1),q=[S];level[S]=0;for(let n=0;n<q.length;n++)for(const e of adj[q[n]])if(e.c>1e-8&&level[e.v]<0){level[e.v]=level[q[n]]+1;q.push(e.v);}if(level[T]<0)break;const it=Array(N).fill(0);
+   function dfs(u,f){if(u===T)return f;for(;it[u]<adj[u].length;it[u]++){const e=adj[u][it[u]];if(e.c>1e-8&&level[e.v]===level[u]+1){const z=dfs(e.v,Math.min(f,e.c));if(z){e.c-=z;adj[e.v][e.r].c+=z;return z;}}}return 0;}
+   for(let f;(f=dfs(S,INF))>0;)flow+=f;
+  }
+  const seen=new Set([S]),q=[S];for(let n=0;n<q.length;n++)for(const e of adj[q[n]])if(e.c>1e-8&&!seen.has(e.v)){seen.add(e.v);q.push(e.v);}
+  const holes=nodes.filter((p,i)=>seen.has(i*2)&&!seen.has(i*2+1)),region=new Set(nodes.filter((p,i)=>seen.has(i*2+1)).map(p=>cell(...p)));
+  if(region.size<s.required||region.size>g.amoeba.max||!holes.length||holes.length>12||flow>=120)continue;
+  const ring=new Map(holes.map(p=>[cell(...p),p]));for(const k of region){const[x,y]=k.split(',').map(Number);for(const[dx,dy]of amoebaDirs)if(!region.has(cell(x+dx,y+dy)))ring.set(cell(x+dx,y+dy),[x+dx,y+dy]);}
+  const points=[...ring.values()],cost=flow+region.size*.001;
+  if(!best||cost<best.cost)best={ring:points,holes,region,yieldSize:region.size,cost,x0:Math.min(...points.map(p=>p[0])),x1:Math.max(...points.map(p=>p[0])),y0:Math.min(...points.map(p=>p[1])),y1:Math.max(...points.map(p=>p[1]))};
+ }
+ return best;
+}
+
+const insideFence=(f,x,y)=>f.region?f.region.has(cell(x,y)):x>f.x0&&x<f.x1&&y>f.y0&&y<f.y1;
+
 export function amoebaFenceScore(g,fence){
  if(!fence||g.amoeba.dead)return -100000;
- let outside=0;g.grid.forEach((r,y)=>r.forEach((t,x)=>{if(t==='a'&&(x<=fence.x0||x>=fence.x1||y<=fence.y0||y>=fence.y1))outside++;}));
+ let outside=0;g.grid.forEach((r,y)=>r.forEach((t,x)=>{if(t==='a'&&!insideFence(fence,x,y))outside++;}));
  const holes=fence.ring.filter(([x,y])=>!barrier(g,x,y)),sealed=fence.holes.length-holes.length,feeds=providers(g,holes);
  const approach=Math.min(80,...feeds.map(p=>Math.abs(p.goal[0]-g.player.x)+Math.abs(p.goal[1]-g.player.y)+p.cost));
  return sealed*1600-outside*3000-approach*25;
@@ -145,6 +174,101 @@ export function amoebaContainPlan(start,{depth=96,width=48,maxInputs=300}={}){
   choices.sort((a,b)=>b.value-a.value);const groups=new Set();beam=choices.filter(c=>{if(groups.has(c.group))return false;groups.add(c.group);return true;}).slice(0,width);
  }
  return {simulated,partials:best?[{game:best.g,input:best.input}]:[]};
+}
+
+function capRoutes(g,fence){
+ const targets=amoebaTargets(g,{holes:fence.ring.filter(p=>!barrier(g,...p))}),q=[{...g.player,input:[]}],seen=new Set([cell(g.player.x,g.player.y)]),routes=[];
+ for(let i=0;i<q.length;i++){
+  const p=q[i],target=targets.get(cell(p.x,p.y));
+  if(target){const input=p.input,snap=input.length?[...input.slice(0,-1),[input.at(-1)[0],input.at(-1)[1],true]]:[];
+   for(const a of [input,snap])if(a.length){routes.push(a);routes.push([...a,...input.slice(-4).reverse().map(([dx,dy])=>[-dx,-dy,false]),...Array.from({length:8},()=>[0,0,false])]);}
+   if(target.action)for(const n of [1,4,8])routes.push([...input,...Array.from({length:n},()=>target.action)]);
+  }
+  if(p.input.length>=32)continue;
+  for(const[dx,dy]of amoebaDirs){const x=p.x+dx,y=p.y+dy,k=cell(x,y);if(seen.has(k)||![' ','.','*'].includes(g.tile(x,y)))continue;seen.add(k);q.push({x,y,input:[...p.input,[dx,dy,false]]});}
+ }
+ for(const a of ACTIONS)routes.push([[a[0],a[1],Boolean(a[2])]]);
+ for(const n of [4,16,64])routes.push(Array.from({length:n},()=>[0,0,false]));return routes;
+}
+
+function harvestRoutes(g){
+ const q=[{...g.player,input:[]}],seen=new Set([cell(g.player.x,g.player.y)]),paths=[],pushes=[];let gems=0,near=100,exit=100;
+ for(let i=0;i<q.length;i++){
+  const p=q[i],t=g.tile(p.x,p.y);
+  if(t==='*'){gems++;near=Math.min(near,p.input.length);if(p.input.length)paths.push(p.input);}
+  if(t==='X'){exit=p.input.length;if(g.collected>=g.target)paths.unshift(p.input);}
+  if(p.input.length>40)continue;
+  for(const[dx,dy]of amoebaDirs){const x=p.x+dx,y=p.y+dy,k=cell(x,y);
+   if(!dy&&g.tile(x,y)==='O'&&g.tile(x+dx,y)===' ')for(const n of [1,4,8,16,32])pushes.push([...p.input,...Array.from({length:n},()=>[dx,0,false])]);
+   if(seen.has(k)||![' ','.','*','X'].includes(g.tile(x,y)))continue;seen.add(k);q.push({x,y,input:[...p.input,[dx,dy,false]]});
+  }
+ }
+ if(near===100)g.grid.forEach((r,y)=>r.forEach((t,x)=>{if(t==='*')near=Math.min(near,Math.abs(x-g.player.x)+Math.abs(y-g.player.y));}));
+ return {routes:[...paths.slice(0,16),...pushes.slice(0,48),...ACTIONS.map(a=>[[a[0],a[1],Boolean(a[2])]])],gems,near,exit};
+}
+
+// Coarse duplicate pruning is a search heuristic, never a claim of equivalent
+// RNG states or a substitute for replaying every accepted input.
+const sequenceKey=g=>JSON.stringify([g.grid,g.player,[...g.falling],[...g.facings],Math.floor(g.remaining/8)]);
+const sequenceScore=(g,length)=>{const f=harvestRoutes(g);return g.status==='won'?1e9:Math.min(g.target,g.collected+f.gems)*3000+g.collected*1000-(g.collected>=g.target?f.exit:f.near)*20-length*.2;};
+
+export function* amoebaHarvestSearch(start,{maxInputs=1200,layers=24,width=96,maxSimulated=400000}={}){
+ if(!Number.isInteger(maxInputs)||maxInputs<1||maxInputs>4000||!Number.isInteger(layers)||layers<1||layers>40||!Number.isInteger(width)||width<1||width>128||!Number.isInteger(maxSimulated)||maxSimulated<1||maxSimulated>600000)throw new Error('Invalid amoeba harvest bounds.');
+ let beam=[{g:start,input:[],value:sequenceScore(start,0)}],best=beam[0],simulated=0;const seen=new Set();
+ for(let layer=0;layer<layers&&beam.length&&simulated<maxSimulated;layer++){
+  const all=[];
+  for(const node of beam)for(const path of harvestRoutes(node.g).routes){
+   if(node.input.length+path.length>maxInputs||simulated+path.length>maxSimulated)continue;
+   const g=cloneGame(node.g),input=[...node.input];for(const[dx,dy,snap]of path){g.step({dx,dy,snap});input.push([dx,dy,snap]);simulated++;if(g.status!=='playing')break;}
+   if(g.status==='dead')continue;if(g.status==='won')return {game:g,input,simulated,phase:'escaped'};
+   const k=sequenceKey(g);if(seen.has(k))continue;seen.add(k);if(seen.size>20000)seen.delete(seen.values().next().value);
+   const c={g,input,value:sequenceScore(g,input.length)};all.push(c);if(c.value>best.value)best=c;
+  }
+  all.sort((a,b)=>b.value-a.value);beam=all.slice(0,width);
+  yield {game:best.g,input:best.input,stage:'harvest',layer:layer+1,simulated};
+ }
+ return {game:best.g,input:best.input,simulated,phase:'harvest',partials:[]};
+}
+
+export function* amoebaContainSearch(start,{fence=amoebaCutFence(start),maxInputs=1600,layers=24,width=96,maxSimulated=260000}={}){
+ if(!Number.isInteger(maxInputs)||maxInputs<1||maxInputs>4000||!Number.isInteger(layers)||layers<1||layers>40||!Number.isInteger(width)||width<1||width>128||!Number.isInteger(maxSimulated)||maxSimulated<1||maxSimulated>600000)throw new Error('Invalid amoeba sequence bounds.');
+ if(!fence)return {simulated:0,partials:[]};
+ const holes=g=>fence.ring.filter(p=>!barrier(g,...p)),score=(g,input)=>{
+  const h=holes(g),s=amoebaState(g),targets=amoebaTargets(g,{holes:h});let outside=0;
+  g.grid.forEach((r,y)=>r.forEach((t,x)=>{if(t==='a'&&!insideFence(fence,x,y))outside++;}));
+  return (fence.holes.length-h.length)*2000-outside*4000+(s.viable?30000:0)-Math.min(80,...[...targets.values()].map(t=>Math.abs(t.goal[0]-g.player.x)+Math.abs(t.goal[1]-g.player.y)+t.cost))*20-input.length*.5;
+ };
+ let beam=[{g:start,input:[]}],best=beam[0],simulated=0,checks=0;const seen=new Set();
+ for(let layer=0;layer<layers&&beam.length&&simulated<maxSimulated;layer++){
+  const all=[];
+  for(const node of beam)for(const path of capRoutes(node.g,fence)){
+   if(node.input.length+path.length>Math.min(800,maxInputs)||simulated+path.length>maxSimulated)continue;
+   const g=cloneGame(node.g),input=[...node.input];for(const[dx,dy,snap]of path){g.step({dx,dy,snap});input.push([dx,dy,snap]);simulated++;if(g.status!=='playing')break;}
+   if(g.status==='dead'||g.amoeba.dead==='O')continue;
+   const s=amoebaState(g);
+   if(checks<8&&(s.viable||s.phase==='diamonds')&&input.length+28<=maxInputs){
+    checks++;const retreat=amoebaEscape(g,{depth:24,width:32,hold:4});simulated+=retreat.simulated;
+    if(retreat.game){
+     const end=retreat.game,steps=[...input,...retreat.input],bound=Math.min(maxInputs-steps.length,Math.max(0,Math.floor((end.remaining-10)/STEP)));
+     yield {game:end,input:steps,stage:'contained',layer:layer+1,simulated};
+     for(let t=0;t<bound&&end.status==='playing'&&!end.amoeba.dead;t++){
+      const state=amoebaState(end);if(!state.viable||!state.outside||shaftThreat(end))break;
+      end.step();steps.push([0,0,false]);simulated++;
+      if(t%64===63)yield {game:end,input:[...steps],stage:'conversion',layer:layer+1,simulated};
+     }
+     if(end.status==='playing'&&end.amoeba.dead==='*'){
+      for(let n=0;n<2&&steps.length<maxInputs;n++){end.step();steps.push([0,0,false]);simulated++;}
+      if(end.status!=='dead')return {game:end,input:steps,simulated,phase:'diamonds',partials:[]};
+     }
+    }
+   }
+   const k=sequenceKey(g);if(seen.has(k))continue;seen.add(k);if(seen.size>20000)seen.delete(seen.values().next().value);
+   const c={g,input,value:score(g,input)};all.push(c);if(best.value===undefined||c.value>best.value)best=c;
+  }
+  all.sort((a,b)=>b.value-a.value);const groups=new Map();beam=all.filter(n=>{const k=holes(n.g).map(p=>cell(...p)).join(';')+':'+cell(n.g.player.x,n.g.player.y),count=groups.get(k)??0;groups.set(k,count+1);return count<2;}).slice(0,width);
+  yield {game:best.g,input:best.input,stage:'caps',layer:layer+1,simulated};
+ }
+ return {simulated,partials:best.input.length?[{game:best.g,input:best.input}]:[]};
 }
 
 const dirs=ACTIONS.slice(0,4);
@@ -381,7 +505,7 @@ function escapeRoutes(g,w,getKey,analyze){
 // next greedy move. Every edge is checked by the real game physics.
 export function* planRoute(context,{seed=1,maxNodes=1800,maxTicks=1800,prefixes=[],fixture=null,fastTrappedTimer=true,guide=()=>0,visited=[],exploration=.25,weights=PRIORITY_DEFAULTS}={}){
  if(!validPriorityWeights(weights))throw new Error('Invalid planning-priority weights.');
- let namespace='s6:'+priorityProfile(weights)+':',amoebaGoal=null;
+ let namespace='s7:'+priorityProfile(weights)+':',amoebaGoal=null;
  // These caches are local to an immutable search graph, never attached to a
  // live Game. Every successor is stepped before it enters the caches.
  const keys=new WeakMap(),worlds=new WeakMap(),emptySetups=new Map();
@@ -435,13 +559,32 @@ export function* planRoute(context,{seed=1,maxNodes=1800,maxTicks=1800,prefixes=
  }
  const trap=maxTicks>best.length?butterflyTrapPlan(best.g,{depth:Math.min(64,maxTicks-best.length)}):{simulated:0};
  if(trap.game){const input=[...trace(best),...trap.input];if(trap.game.status==='won')return {game:trap.game,input,expanded,seed,finished:true,tacticalSteps:trap.simulated};add(trap.game,null,input);}
+ const sequencePartials=[];let sequenceSteps=0;
+ if(approach&&needsGeneration&&maxNodes>=256&&birth.length+approach.input.length<maxTicks){
+  const prefix=[...birth,...approach.input],limit=maxTicks-prefix.length;
+  function progress(stage,base){const c=amoebaState(stage.game);return {decision:0,diamonds:Math.max(best.g.collected,stage.game.collected),ticks:best.length,frontier:open.length,searchPosition:[stage.game.player.x,stage.game.player.y],searchDiamonds:stage.game.collected,searchTicks:base.length+stage.input.length,previewInput:[...base,...stage.input],previewBranches:[],amoeba:{phase:c.phase,size:c.size,capacity:c.capacity,openings:c.frontier.length},amoebaStage:stage.stage,amoebaLayer:stage.layer,amoebaSimulated:stage.simulated};}
+  const containment=amoebaContainSearch(approach.game,{maxInputs:limit,maxSimulated:Math.min(260000,maxNodes*440)});let step;
+  do{step=containment.next();if(!step.done)yield progress(step.value,prefix);}while(!step.done);
+  const setup=step.value;sequenceSteps+=setup.simulated;
+  for(const p of setup.partials??[]){const input=[...prefix,...p.input];add(p.game,null,input);sequencePartials.push(input);}
+  if(setup.game){
+   const base=[...prefix,...setup.input];add(setup.game,null,base);sequencePartials.push(base);
+   if(base.length<maxTicks){
+    const harvest=amoebaHarvestSearch(setup.game,{maxInputs:maxTicks-base.length,maxSimulated:Math.min(400000,maxNodes*670)});
+    do{step=harvest.next();if(!step.done)yield progress(step.value,base);}while(!step.done);
+    const result=step.value,input=[...base,...result.input];sequenceSteps+=result.simulated;
+    if(result.game.status==='won')return {game:result.game,input,expanded,seed,finished:true,tacticalSteps:trap.simulated,amoebaSteps:sequenceSteps};
+    add(result.game,null,input);sequencePartials.push(input);
+   }
+  }
+ }
  const workers=open.filter(n=>world(n.g).amoeba&&!n.g.amoeba.dead&&n.length<maxTicks&&analyze(n.g).colony.distance<=8).sort((a,b)=>analyze(a.g).colony.distance+a.length*.02-analyze(b.g).colony.distance-b.length*.02);
- const reference=approach?.game.status==='playing'?amoebaFence(approach.game):null;
+ const reference=approach?.game.status==='playing'?(amoebaCutFence(approach.game)??amoebaFence(approach.game)):null;
  const work=reference?workers.map(node=>({node,fence:reference})).sort((a,b)=>amoebaFenceScore(b.node.g,reference)-amoebaFenceScore(a.node.g,reference)+a.node.length*.01-b.node.length*.01)[0]:workers.slice(0,24).map(node=>({node,fence:amoebaFence(node.g)})).filter(p=>p.fence).sort((a,b)=>a.fence.cost-b.fence.cost)[0],near=work?.node;
- if(near){amoebaGoal=work.fence;namespace='s6:'+stateHash(priorityProfile(weights)+JSON.stringify([amoebaGoal.x0,amoebaGoal.x1,amoebaGoal.y0,amoebaGoal.y1]))+':';for(const n of open)n.amoebaFocus=world(n.g).amoeba&&!n.g.amoeba.dead?amoebaFenceScore(n.g,amoebaGoal):-Infinity;}
+ if(near){amoebaGoal=work.fence;namespace='s7:'+stateHash(priorityProfile(weights)+JSON.stringify(amoebaGoal.ring))+':';for(const n of open)n.amoebaFocus=world(n.g).amoeba&&!n.g.amoeba.dead?amoebaFenceScore(n.g,amoebaGoal):-Infinity;}
  if(near&&amoebaGoal){const c=analyze(near.g).colony;yield {decision:0,diamonds:best.g.collected,ticks:best.length,frontier:open.length,searchPosition:[near.g.player.x,near.g.player.y],searchDiamonds:near.g.collected,searchTicks:near.length,previewInput:trace(near),previewBranches:[],amoeba:{phase:c.phase,size:c.size,capacity:c.capacity,openings:c.frontier.length}};}
  const amoeba=near&&amoebaState(near.g).distance<=8?amoebaContainPlan(near.g,{maxInputs:maxTicks-near.length}):{simulated:0,partials:[]};
- const preparations=[];
+ amoeba.simulated+=sequenceSteps;const preparations=[...sequencePartials];
  if(amoeba.game){const input=[...trace(near),...amoeba.input];add(amoeba.game,null,input);preparations.push(input);}
  for(const partial of amoeba.partials){const input=[...trace(near),...partial.input];add(partial.game,null,input);preparations.push(input);}
  const tier=n=>n.harvest?2:n.containment?1:0;

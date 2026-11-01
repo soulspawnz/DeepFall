@@ -44,6 +44,8 @@ For the distinction between amoeba access, actual containment, sufficient conver
 
 Planner revision 6 adds the [implemented containment and escape support](AMOEBA_PLANNING.md#implemented-planning-support): bounded growth-region analysis, proposed rock fences, physics-tested setup/retreat sequences, and reserved search/frontier space for developing low-diamond preparations. Its amoeba multiplier rewards a sufficiently large bounded growth region, while actual diamond conversion and collection stay separate. Live progress reports candidate colony state; saved `amoebaPlanning` summaries are checked against engine replay on import. This support does not imply a guaranteed solution to original G.
 
+Revision 7 adds [complete containment sequences](AMOEBA_PLANNING.md#complete-containment-sequences-revision-7): natural-boundary enclosure proposals, multi-step cap placement, waiting for confirmed conversion, reopening access, and harvesting through an actual exit. Sequence-stage ranking includes reachable supply so opening a sealed pocket can outrank isolated collection. Its geometry and finite search are explicit planning machinery, not a newly trained neural network. The existing learned values and priority profiles remain in use by the ordinary planner; a successful new sequence becomes a retained winning memory. Subsequent evaluation may follow that memory. Progress labels and separate physics-step counts distinguish this extra planning work from ordinary macro expansions.
+
 A partial result is the best candidate found within the search budget. Different searches can return the same incumbent, producing identical diamond and step counts. More route variety or higher exploration does not by itself establish progress.
 
 ## Auto exploration

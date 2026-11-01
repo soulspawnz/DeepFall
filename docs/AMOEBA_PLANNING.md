@@ -4,6 +4,22 @@ These are engine-grounded planning recommendations, not a claim that a keyboard 
 
 ## Implemented planning support
 
+### Complete containment sequences (revision 7)
+
+The earlier rectangle proposal could leave several infeasible openings, count one rock as a possible feed for multiple holes, and retain preparations without completing the enclosure. Taking the loose diamonds first can also consume the time needed to control growth. A high collected count is insufficient when the remaining supply still depends on an uncontrolled colony.
+
+Revision 7 adds weighted vertex cuts through the potential growth graph. These propose irregular enclosures along existing solid boundaries, with enough potential yield and at most twelve missing caps. Feed costs are estimates, not allocated rocks. The sequence search must physically clear supports, push, settle, and retreat; it tracks which boundary cells remain open, including supports lost during work, rather than merging every configuration with the same number of caps.
+
+A bounded macro beam tests whole work sequences before the ordinary search. Once actual simulation establishes sufficient enclosure, it forecasts a living retreat and waits through real growth ticks for confirmed diamond conversion. Waiting reserves ten cave seconds and stays within the overall input limit; that reserve is a search bound, not a guarantee of enough escape time. It then searches access, harvest, and exit. Reachable diamond supply contributes to ranking, so moving a cap that opens a rich pocket can outrank collecting an isolated loose gem. Longer bounded push attempts account for the original game's probabilistic pushing. Every accepted result is still an actual input sequence replayable from birth.
+
+Both sequence beams retain at most 96 states per layer for 24 layers. Cap work has a 260,000-action expansion allowance at the normal budget, plus at most eight bounded retreat/conversion forecasts; harvest work has a 400,000-action allowance. Smaller configured search budgets reduce those allowances, and the sequence stage runs only with at least 256 macro nodes available. Coarse duplicate pruning intentionally merges some timing/RNG alternatives and can miss a solution; it does not establish that merged states are equivalent. There are no cave-coordinate scripts or imported winning recordings.
+
+Live progress names cap placement, containment, conversion waiting, and harvest separately, with actual physics work and candidate colony state. Each beam layer yields a real candidate recording for the existing preview. Smooth mode continues to display only the completed run. Revision `s7` separates old expansion fingerprints while preserving learned values, profiles, archived inputs, and partial recordings. A later evaluation may reuse a newly learned escape; that is retention, not another independent discovery.
+
+Tests cover an invented cap/conversion/harvest/exit sequence and reopening a sealed diamond pocket, in addition to the earlier safety checks. Actual original-cave results must still be measured and replay-verified separately.
+
+### Earlier support (revision 6)
+
 Planner revision 6 implements a conservative growth-region analysis, proposed rock fences, a bounded cap/retreat/conversion search, and escape forecasts. It counts dirt, vacated player cells, moving enemies, and falling objects as potential future growth space. Growth capacity is counted only up to the amoeba limit plus one: a value above the limit is a lower bound, not an exact region size. A bounded region must have enough potential yield; a merely bounded small colony is not confirmed diamonds.
 
 The planner first proposes a nearby work position through the real simulation. It considers rectangular fences around every current amoeba component, missing fence cells, rock feeds, lower shaft clearing, horizontal pushes, and settling. These rectangles are goals for search, never inserted walls. The event search keeps at most 48 states per layer for up to 96 layers, with additional bounded retreat and waiting work counted separately. A completed setup must survive a physics-tested retreat outside the growth pocket before waiting for conversion; surviving near an unbounded colony is not the same achievement.

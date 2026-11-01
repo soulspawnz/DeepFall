@@ -2,11 +2,34 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Game} from '../engine.mjs';
 import {cloneGame} from '../simulation.mjs';
-import {amoebaState,amoebaFence,amoebaTargets,amoebaEscape,amoebaContainPlan,planRoute,amoebaSummary} from '../route-planner.mjs';
+import {amoebaState,amoebaFence,amoebaCutFence,amoebaTargets,amoebaEscape,amoebaContainPlan,amoebaContainSearch,amoebaHarvestSearch,planRoute,amoebaSummary} from '../route-planner.mjs';
 import {learningReplay,verifyLearningReplay,validLearningReplay} from '../learning-archive.mjs';
 import {inputFingerprint,planningPrefixes} from '../learning-player.mjs';
 function layout(rows,extra={}){let player;const grid=rows.map((r,y)=>[...r].map((t,x)=>{if(t==='@'){player={x,y};return ' ';}return t;}));return {grid,player,original:true,birth:0,target:4,time:150,amoebaMax:8,amoebaTime:75,...extra};}
 const pocket=()=>layout(['##########','# @      #','#   O   X#','#   .    #','####a#####','####a#####','####.#####','####.#####','##########']);
+function consume(generator){let step;const progress=[];do{step=generator.next();if(!step.done)progress.push(step.value);}while(!step.done);return {...step.value,progress};}
+
+test('natural-boundary cuts preserve the source and have enough potential yield',()=>{
+ const g=new Game(0,'classic',pocket());g.start();const before=g.snapshot(),f=amoebaCutFence(g);assert.ok(f);assert.ok(f.region instanceof Set);assert.ok(f.yieldSize>=4&&f.yieldSize<=8);assert.ok(f.holes.length);assert.deepEqual(g.snapshot(),before);
+ for(const row of g.grid.entries()){const[y,tiles]=row;for(const[x,t]of tiles.entries())if(t==='a')assert.ok(f.region.has(`${x},${y}`));}
+ const edges=new Set(f.ring.map(p=>p.join(',')));for(const k of f.region){const[x,y]=k.split(',').map(Number);for(const[dx,dy]of [[1,0],[-1,0],[0,1],[0,-1]])if(!f.region.has(`${x+dx},${y+dy}`))assert.ok(edges.has(`${x+dx},${y+dy}`));}
+});
+
+test('sequence search places real caps, waits for conversion, reopens supply and exits',()=>{
+ const f={...pocket(),amoebaTime:1},g=new Game(0,'classic',f);g.start();const before=g.snapshot(),setup=consume(amoebaContainSearch(g,{maxInputs:400,layers:12,width:32,maxSimulated:80000}));assert.ok(setup.game);assert.equal(setup.phase,'diamonds');assert.notEqual(setup.game.status,'dead');assert.ok(setup.progress.some(p=>p.stage==='contained'));assert.deepEqual(g.snapshot(),before);
+ const harvest=consume(amoebaHarvestSearch(setup.game,{maxInputs:200,layers:16,width:32,maxSimulated:80000}));assert.equal(harvest.game.status,'won',JSON.stringify({setup:setup.game.grid,player:setup.game.player,after:harvest.game.grid,collected:harvest.game.collected,steps:harvest.input.length}));assert.ok(harvest.game.collected>=4);
+ const replay=new Game(0,'classic',f);replay.start();for(const[dx,dy,snap]of [...setup.input,...harvest.input])replay.step({dx,dy,snap});assert.deepEqual(replay.snapshot(),harvest.game.snapshot());
+});
+
+test('harvest search values opening access to a sealed diamond pocket',()=>{
+ const f=layout(['##########','# @      #','#   O   X#','####*#####','####*#####','####*#####','####*#####','##########']),g=new Game(0,'classic',f);g.start();const before=g.snapshot(),r=consume(amoebaHarvestSearch(g,{maxInputs:180,layers:16,width:32,maxSimulated:80000}));assert.equal(r.game.status,'won');assert.equal(r.game.collected,4);assert.deepEqual(g.snapshot(),before);
+ const replay=new Game(0,'classic',f);replay.start();for(const[dx,dy,snap]of r.input)replay.step({dx,dy,snap});assert.deepEqual(replay.snapshot(),r.game.snapshot());
+});
+
+test('sequence searches reject excessive work and respect a tiny input budget',()=>{
+ const g=new Game(0,'classic',pocket());g.start();assert.throws(()=>consume(amoebaContainSearch(g,{layers:400})),/bounds/);assert.throws(()=>consume(amoebaHarvestSearch(g,{width:400})),/bounds/);
+ const r=consume(amoebaContainSearch(g,{maxInputs:1,layers:1,width:1,maxSimulated:10}));assert.equal(r.game,undefined);for(const p of r.partials)assert.ok(p.input.length<=1);
+});
 test('dirt, occupied cells, enemies and falling objects do not establish stable enclosure',()=>{
  const g=new Game(0,'classic',pocket());g.start();const before=g.snapshot(),s=amoebaState(g);assert.equal(s.phase,'growing');assert.ok(s.frontier.length);assert.deepEqual(g.snapshot(),before);
  g.grid[3][4]='O';g.falling.add('4,3');assert.equal(amoebaState(g).phase,'growing');g.falling.clear();assert.equal(amoebaState(g).phase,'bounded');assert.equal(amoebaState(g).capacity,4);
