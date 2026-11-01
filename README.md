@@ -63,6 +63,8 @@ With **Show search rewinds** enabled, the outlined endpoint can be ahead of the 
 
 Auto starts at 25% and reviews progress every five completed training attempts, within a 10–60% range. It can favor reliable routes or broaden a stalled search. Evaluation runs do not count as training successes. **STOP TRAINING** keeps completed attempts; unfinished attempts are not saved as completed runs.
 
+Butterfly planning considers shaft clearing, sideways rock placement, and a bounded physics search for a complete crush-and-escape sequence. Once a generation-dependent cave has enough real collected or pending diamonds to meet its quota, the planner prioritizes harvesting that supply and reaching the exit. Setup scores never count as collected diamonds or successful runs.
+
 The player combines a learned decision table with bounded physics search and retained partial routes, including butterfly, amoeba, and magic-wall setup proposals. It also learns scoring multipliers from completed priority trials; expand **Planning priorities** to inspect them. It is **not a neural network**, and it can plateau. Collecting the quota is not a win: it must reach the exit. See [how learning, planning, and evaluation work](docs/LEARNING.md).
 
 ## Replays and backups

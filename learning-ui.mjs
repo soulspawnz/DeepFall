@@ -221,6 +221,7 @@ export function mountLearning({getContext,pause,onWatch,onTrainingPreview=()=>{}
    const watchLabel=record.kind==='training'?`WATCH ATTEMPT ${record.attempt}`:record.kind==='baseline'?'WATCH BASELINE':`WATCH EVALUATION ${record.attempt}`;
    const playButton=button('PLAY',()=>{pause();onWatch(replayAttempt(record));},cell);playButton.setAttribute('aria-label',watchLabel);playButton.title=watchLabel;
    if(record.run.plannerRevision)playButton.title+=` · planned route · ${record.run.searchExpanded} search states · ${record.run.reusedPartials} remembered routes`;
+   if(record.run.searchTacticalSteps)playButton.title+=` · ${record.run.searchTacticalSteps} tactical physics steps`;
    if(record.run.planningPriorities)playButton.title+=` · priority profile ${record.run.planningPriorities.profile} (${record.run.planningPriorities.kind}) · outcome quality ${record.run.priorityFitness.toFixed(2)}`;
    if(record.reconstructed)text('small','Verified reconstruction',cell);tbody.append(row);
   }

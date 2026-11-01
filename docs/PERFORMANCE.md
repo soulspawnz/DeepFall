@@ -41,9 +41,9 @@ The search remains single-worker JavaScript. Optimizations target repeated work 
 - Simulation clones copy mutable physics containers directly rather than constructing an intermediate snapshot and wrapping its collections again.
 - Search keys serialize the same ordered fields without deep-copying the grid first; persisted key bytes remain compatible.
 - Each search locally caches keys and analysis for immutable successor states. Live mutable games are not placed in those caches. Distance vectors remain bounded by the existing global cache rather than retained for every search node.
-- Distance propagation uses numeric cell indices instead of allocating coordinate pairs. Generation/setup analysis is reused; stages without amoeba or magic walls skip that analysis internally.
+- Distance propagation uses numeric cell indices instead of allocating coordinate pairs. Setup analysis is reused; amoeba/magic-wall analysis is skipped when those objects are absent. Butterfly setup planning is described separately in [development](DEVELOPMENT.md).
 
-Learned multipliers, search budgets, action ordering, and replay formats remain the same. More states per second does not establish better planning or a solved cave.
+The profiling optimization preserved learned multipliers, search budgets, action ordering, and replay formats. Later planning revisions may change the strategy and add separately bounded tactical work; compare the same strategy when measuring implementation speed alone. More states per second does not establish better planning or a solved cave.
 
 ## Verification
 

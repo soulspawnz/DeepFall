@@ -51,6 +51,65 @@ export function generationTargets(g){
  }
  return targets;
 }
+// A butterfly is future supply, not a collectable destination. Propose dirt
+// supports that can release a rock near it, then validate the whole setup and
+// retreat with real physics. Never count a proposal as a generated diamond.
+export function butterflyTargets(g){
+ const enemies=[];g.grid.forEach((row,y)=>row.forEach((tile,x)=>{if(tile==='b')enemies.push([x,y]);}));
+ const targets=new Map();if(!enemies.length||g.collected>=g.target)return targets;
+ for(let y=1;y<g.grid.length-1;y++)for(let x=1;x<g.grid[y].length-1;x++){
+  if(g.tile(x,y)!=='O')continue;
+  const enemy=enemies.filter(([ex,ey])=>ey>y&&ey-y<=10&&Math.abs(ex-x)<=10).sort((a,b)=>Math.abs(a[0]-x)+a[1]-y-Math.abs(b[0]-x)-b[1]+y)[0];if(!enemy)continue;
+  const shaft=[];let blocked=false;for(let yy=y+1;yy<=enemy[1];yy++){const t=g.tile(x,yy);if(!['.',' ','b'].includes(t)){blocked=true;break;}if(t==='.')shaft.push([x,yy]);}
+  if(blocked||!shaft.length)continue;
+  for(const [xx,yy]of shaft){const cell=`${xx},${yy}`,value=8000-Math.abs(enemy[0]-x)*200+(yy-y)*100;if((targets.get(cell)?.value??0)<value)targets.set(cell,{kind:'butterfly-release',value,rock:[x,y],shaft});}
+ }
+ return targets;
+}
+// Estimate the next useful setup, including horizontal relocation. Butterfly
+// proximity alone is not a lure: an unobstructed enemy can circle indefinitely.
+export function butterflyReadiness(g){
+ const enemies=[];g.grid.forEach((r,y)=>r.forEach((t,x)=>{if(t==='b')enemies.push([x,y]);}));
+ let best={value:0,distance:100};
+ if(!enemies.length)return best;
+ for(let y=1;y<g.grid.length-1;y++)for(let x=1;x<g.grid[y].length-1;x++){
+  if(g.grid[y][x]!=='O')continue;
+  for(const [ex,ey]of enemies){
+   if(ey<=y||ey-y>10||Math.abs(ex-x)>10)continue;
+   let dx=0,dirt=0,destination=null;
+   if(x!==ex){dx=Math.sign(ex-x);destination=g.tile(x+dx,y)==='.'?[x+dx,y]:[x-dx,y];}
+   else for(let yy=y+1;yy<ey;yy++){const tile=g.tile(x,yy);if(tile==='.') {dirt++;destination=[x,yy];}else if(tile!==' ') {dirt+=10;break;}}
+   destination??=[x+1,y];
+   const distance=Math.abs(g.player.x-destination[0])+Math.abs(g.player.y-destination[1]);
+   const value=Math.max(0,6000-Math.abs(ex-x)*700-(ey-y)*120-dirt*120-distance*20);
+   if(value>best.value)best={value,distance,rock:[x,y]};
+  }
+ }
+ return best;
+}
+// Bounded event search: compare a complete push/drop/escape sequence with
+// collection branches, rather than requiring every setup step to earn gems.
+export function butterflyTrapPlan(start,{depth=64,width=64}={}){
+ if(!Number.isInteger(depth)||depth<1||depth>128||!Number.isInteger(width)||width<1||width>96)throw new Error('Invalid butterfly search bounds.');
+ let simulated=0;const supply=g=>g.grid.reduce((n,row)=>n+row.filter(t=>t==='*'||t==='d').length,0),initialSupply=supply(start);
+ if(initialSupply>=start.target-start.collected||!start.grid.some(r=>r.includes('b')))return {simulated};
+ let beam=[{g:start,input:[]}];const seen=new Set();
+ for(let n=0;n<depth&&beam.length;n++){
+  const choices=[];
+  for(const node of beam)for(const action of ACTIONS){
+   const g=cloneGame(node.g);g.step({dx:action[0],dy:action[1],snap:Boolean(action[2])});simulated++;
+   if(g.status==='dead'||diamondPotential(g)<g.target)continue;
+   const input=[...node.input,[action[0],action[1],Boolean(action[2])]],available=supply(g);
+   if(g.status==='won'||g.collected>start.collected||g.collected+available>start.collected+initialSupply)return {game:g,input,simulated};
+   const key=planningKey(g);if(seen.has(key))continue;seen.add(key);if(seen.size>12000)seen.delete(seen.values().next().value);
+   const readiness=butterflyReadiness(g);
+   choices.push({g,input,value:readiness.value-input.length,group:`${g.player.x},${g.player.y}:${readiness.rock}:${[...g.facings.keys()].join(';')}`});
+  }
+  choices.sort((a,b)=>b.value-a.value);const groups=new Set();beam=[];
+  for(const c of choices){if(groups.has(c.group))continue;groups.add(c.group);beam.push(c);if(beam.length>=width)break;}
+ }
+ return {simulated};
+}
 const distanceCache=new Map();
 function goalDistances(g){
  const exit=g.collected>=g.target,key=+exit+':'+(g.magic.remaining>0)+':'+g.grid.map(r=>r.join('')).join('');
@@ -110,7 +169,7 @@ function paths(g,w,facts){
  return [...goals.slice(0,24).flatMap(g=>{
   const snap=[...g.path.slice(0,-1),[g.path.at(-1)[0],g.path.at(-1)[1],true]];
   const retreat=g.path.slice(0,-1).slice(-4).reverse().map(([dx,dy])=>[-dx,-dy,false]);
-  return [...(g.snap?[g.path,snap]:[g.path]),...(g.support||g.setup?[[...snap,...retreat,...Array.from({length:8},()=>[0,0,false])]]:[])];
+  return [...(g.snap?[g.path,snap]:[g.path]),...(g.support||g.setup?[[...snap,...retreat,...Array.from({length:8},()=>[0,0,false])]]:[]),...(g.setup==='butterfly-release'?[2,16].map(wait=>[...snap,...retreat,...Array.from({length:wait},()=>[0,0,false])]):[])];
  }),...pushes.sort((a,b)=>b.value-a.value).slice(0,8).flatMap(p=>[p.path,[...p.path,...Array.from({length:8},()=>[-p.path.at(-1)[0],0,false])]])];
 }
 function trace(node){const chunks=[];for(let n=node;n;n=n.parent)chunks.push(n.actions);return chunks.reverse().flat();}
@@ -120,7 +179,7 @@ export function planningPriority(g,length,w=PRIORITY_DEFAULTS,facts=null){
  const distance=facts?.distance??Math.min(100,goalDistances(g)[g.player.y*g.grid[0].length+g.player.x]);
  let preparation=facts?.preparation??0;
  if(!facts){for(const cell of corridorTargets(g)){const [x,y]=cell.split(',').map(Number);preparation=Math.max(preparation,Math.max(0,3-Math.abs(x-g.player.x)-Math.abs(y-g.player.y))*60);}
- for(const [cell,setup]of generationTargets(g)){const [x,y]=cell.split(',').map(Number);preparation=Math.max(preparation,Math.max(0,5-Math.abs(x-g.player.x)-Math.abs(y-g.player.y))*(setup.kind==='magic-outlet'?80:50));}}
+ for(const [cell,setup]of [...generationTargets(g),...butterflyTargets(g)]){const [x,y]=cell.split(',').map(Number);preparation=Math.max(preparation,Math.max(0,5-Math.abs(x-g.player.x)-Math.abs(y-g.player.y))*(setup.kind==='magic-outlet'?80:50));}preparation=Math.max(preparation,butterflyReadiness(g).value*.3);}
  const pending=facts?.pending??(g.amoeba.dead==='*'?g.grid.reduce((n,r)=>n+r.filter(t=>t==='a').length,0):0);
  const needed=Math.max(0,g.target-g.collected);
  const pushes=[-1,1].filter(dx=>g.tile(g.player.x+dx,g.player.y)==='O'&&g.tile(g.player.x+2*dx,g.player.y)===' ').length;
@@ -171,7 +230,7 @@ function escapeRoutes(g,w,getKey,analyze){
 // next greedy move. Every edge is checked by the real game physics.
 export function* planRoute(context,{seed=1,maxNodes=1800,maxTicks=1800,prefixes=[],fixture=null,fastTrappedTimer=true,guide=()=>0,visited=[],exploration=.25,weights=PRIORITY_DEFAULTS}={}){
  if(!validPriorityWeights(weights))throw new Error('Invalid planning-priority weights.');
- const namespace='s4:'+priorityProfile(weights)+':';
+ const namespace='s5:'+priorityProfile(weights)+':';
  // These caches are local to an immutable search graph, never attached to a
  // live Game. Every successor is stepped before it enters the caches.
  const keys=new WeakMap(),worlds=new WeakMap(),emptySetups=new Map();
@@ -184,22 +243,25 @@ export function* planRoute(context,{seed=1,maxNodes=1800,maxTicks=1800,prefixes=
  }
  function analyze(g){
   const f=world(g);if(f.analyzed)return f;
-  const distances=goalDistances(g);f.critical=corridorTargets(g,distances);f.setups=f.amoeba||f.magic?generationTargets(g):emptySetups;
+  const distances=goalDistances(g);f.critical=corridorTargets(g,distances);const butterfly=butterflyTargets(g);f.setups=f.amoeba||f.magic?generationTargets(g):butterfly.size?new Map():emptySetups;for(const [cell,setup]of butterfly)if(!f.setups.has(cell))f.setups.set(cell,setup);
   f.distance=Math.min(100,distances[g.player.y*g.grid[0].length+g.player.x]);f.preparation=0;
   for(const cell of f.critical){const [x,y]=cell.split(',').map(Number);f.preparation=Math.max(f.preparation,Math.max(0,3-Math.abs(x-g.player.x)-Math.abs(y-g.player.y))*60);}
   for(const [cell,setup]of f.setups){const [x,y]=cell.split(',').map(Number);f.preparation=Math.max(f.preparation,Math.max(0,5-Math.abs(x-g.player.x)-Math.abs(y-g.player.y))*(setup.kind==='magic-outlet'?80:50));}
+  f.preparation=Math.max(f.preparation,butterflyReadiness(g).value*.3);
   f.analyzed=true;return f;
  }
  const start=new Game(context.index,'classic',fixture,{...context,fastTrappedTimer});start.start();
  const birth=[];while(!start.born&&start.status==='playing'){start.step();birth.push([0,0,false]);}
  const root={g:start,parent:null,actions:birth,length:birth.length};root.value=planningPriority(start,root.length,weights,analyze(start));
+ const needsGeneration=world(start).available<start.target;
  const open=[root],seen=new Map([[getKey(start),root.length]]);let best=root,expanded=0;
  const completed=new Map(visited);
  function add(g,parent,actions){
   if(!actions.length||g.status==='dead'||world(g).potential<g.target||(mobility(g)===0&&g.isTrapped()))return;
   const length=(parent?.length??0)+actions.length;if(length>maxTicks)return;
-  const node={g,parent,actions,length,value:planningPriority(g,length,weights,analyze(g))};
-  if(g.collected>best.g.collected||(g.collected===best.g.collected&&node.value>best.value))best=node;
+  const harvest=Boolean(parent?.harvest||needsGeneration&&g.collected+world(g).available>=g.target);
+  const node={g,parent,actions,length,harvest,value:harvest?planningOutcomeFitness(g,length):planningPriority(g,length,weights,analyze(g))};
+  if(g.collected>best.g.collected||(g.collected===best.g.collected&&(Number(harvest)>Number(Boolean(best.harvest))||harvest===Boolean(best.harvest)&&node.value>best.value)))best=node;
   const key=getKey(g),prior=seen.get(key);if(prior!==undefined&&prior<=length)return;
   if((completed.get(namespace+stateHash(key))??Infinity)<=length)return;
   seen.set(key,length);open.push(node);
@@ -218,12 +280,14 @@ export function* planRoute(context,{seed=1,maxNodes=1800,maxTicks=1800,prefixes=
   }
   if(g.status==='playing'&&g.born)add(g,null,chunk.map(a=>[...a]));
  }
+ const trap=maxTicks>best.length?butterflyTrapPlan(best.g,{depth:Math.min(64,maxTicks-best.length)}):{simulated:0};
+ if(trap.game){const input=[...trace(best),...trap.input];if(trap.game.status==='won')return {game:trap.game,input,expanded,seed,finished:true,tacticalSteps:trap.simulated};add(trap.game,null,input);}
  for(;expanded<maxNodes&&open.length;expanded++){
-  open.sort((a,b)=>b.value-a.value||a.length-b.length);
+  open.sort((a,b)=>Number(Boolean(b.harvest))-Number(Boolean(a.harvest))||b.value-a.value||a.length-b.length);
   // Periodic breadth expansion prevents a high-diamond dead end from consuming
   // the entire search before earlier corridor-opening choices are revisited.
   const breadthEvery=exploration>0?Math.round(1/Math.max(.05,Math.min(.8,exploration)))+1:Infinity;
-  let pick=0;if(expanded%breadthEvery===breadthEvery-1){let shortest=Infinity;for(let i=0;i<open.length;i++)if(open[i].length<shortest){shortest=open[i].length;pick=i;}}
+  let pick=0;if(expanded%breadthEvery===breadthEvery-1){let shortest=Infinity;const harvest=Boolean(open[0].harvest);for(let i=0;i<open.length;i++)if(Boolean(open[i].harvest)===harvest&&open[i].length<shortest){shortest=open[i].length;pick=i;}}
   const [node]=open.splice(pick,1),g=node.g;
   const fingerprint=namespace+stateHash(getKey(g));if((completed.get(fingerprint)??Infinity)<=node.length)continue;
   completed.set(fingerprint,node.length);
@@ -244,7 +308,7 @@ export function* planRoute(context,{seed=1,maxNodes=1800,maxTicks=1800,prefixes=
     if(!successor){successor=cloneGame(next);successor.step({dx:a[0],dy:a[1],snap:a[2]});transitions.set(pathKey,successor);}
     next=successor;actual.push(a);
     const last=points.at(-1);if(points.length<33&&(last[0]!==next.player.x||last[1]!==next.player.y))points.push([next.player.x,next.player.y]);
-    if(next.status==='won')return {game:next,input:[...trace(node),...actual],expanded:expanded+1,seed,finished:true};
+    if(next.status==='won')return {game:next,input:[...trace(node),...actual],expanded:expanded+1,seed,finished:true,tacticalSteps:trap.simulated};
     if(next.status==='dead')break;
     // Keep escape branches along a corridor instead of only at its end.
     if(i<route.length-1&&(i===route.length-2||next.collected>previousCollected||i%4===3||(i>0&&(route[i-1][0]!==a[0]||route[i-1][1]!==a[1]))))add(next,node,actual.map(a=>[...a]));
@@ -254,12 +318,12 @@ export function* planRoute(context,{seed=1,maxNodes=1800,maxTicks=1800,prefixes=
    if(next.status==='playing'&&next.falling.has(`${next.player.x},${next.player.y-1}`)){
     for(const escape of escapeRoutes(next,weights,getKey,analyze)){
      const actions=[...actual,...escape.path];
-     if(escape.g.status==='won')return {game:escape.g,input:[...trace(node),...actions],expanded:expanded+1,seed,finished:true};
+     if(escape.g.status==='won')return {game:escape.g,input:[...trace(node),...actions],expanded:expanded+1,seed,finished:true,tacticalSteps:trap.simulated};
      add(escape.g,node,actions);
     }
    }
   }
-  if(open.length>1800){open.sort((a,b)=>b.value-a.value);const groups=new Map();for(let i=0;i<open.length;i++){const n=open[i],k=`${n.g.collected}:${Math.floor(n.g.player.x/8)}:${Math.floor(n.g.player.y/6)}`;const count=(groups.get(k)??0)+1;groups.set(k,count);if(count>40){open.splice(i,1);i--;}}if(open.length>1800)open.length=1800;}
+  if(open.length>1800){open.sort((a,b)=>Number(Boolean(b.harvest))-Number(Boolean(a.harvest))||b.value-a.value);const groups=new Map();for(let i=0;i<open.length;i++){const n=open[i],k=`${Boolean(n.harvest)}:${n.g.collected}:${Math.floor(n.g.player.x/8)}:${Math.floor(n.g.player.y/6)}`;const count=(groups.get(k)??0)+1;groups.set(k,count);if(count>40){open.splice(i,1);i--;}}if(open.length>1800)open.length=1800;}
   if(expanded%8===0){
    const choices=[...branchChoices.values()],first=new Set(),branches=[];
    for(const b of choices){const key=JSON.stringify(b.points[1]);if(!first.has(key)){first.add(key);branches.push(b);}}
@@ -267,7 +331,7 @@ export function* planRoute(context,{seed=1,maxNodes=1800,maxTicks=1800,prefixes=
    yield {decision:expanded+1,diamonds:best.g.collected,ticks:best.length,frontier:open.length,searchPosition:[g.player.x,g.player.y],searchDiamonds:g.collected,searchTicks:node.length,previewInput:trace(node),previewBranches:branches.slice(0,12)};
   }
  }
- open.sort((a,b)=>b.value-a.value);const groups=new Map(),candidates=[];
+ open.sort((a,b)=>Number(Boolean(b.harvest))-Number(Boolean(a.harvest))||b.value-a.value);const groups=new Map(),candidates=[];
  for(const n of open){const k=`${n.g.collected}:${Math.floor(n.g.player.x/5)}:${Math.floor(n.g.player.y/4)}`,count=groups.get(k)??0;if(count>=3)continue;groups.set(k,count+1);candidates.push(n);if(candidates.length>=64)break;}
- return {game:best.g,input:trace(best),expanded,seed,finished:false,frontier:candidates.map(trace),visited:[...completed].slice(-6000)};
+ return {game:best.g,input:trace(best),expanded,seed,finished:false,frontier:candidates.map(trace),visited:[...completed].slice(-6000),tacticalSteps:trap.simulated};
 }

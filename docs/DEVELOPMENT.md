@@ -83,6 +83,10 @@ Offline output uses `deepfall-offline-solver-1`, with Boolean snap flags, search
 
 The learning player uses related amoeba-access, conversion-waiting, and magic-wall outlet/feed proposals, checked by normal physics. Focused tests are in `test/generation-planning.test.mjs`.
 
+Butterfly planning adds lower-shaft targets and rock-alignment estimates under the learned preparation multiplier. Before the macro search, a bounded event beam explores up to 64 steps with at most 64 retained states per step (at most 36,864 simulated actions); its visited-key cache is capped at 12,000 entries. It only seeds a continuation after actual simulation produces extra supply or collection without death or an insufficient-diamond result. The remaining input budget also bounds this event search. New recordings use planner revision 5 and record `searchTacticalSteps` separately from macro `searchExpanded` / `searchBudget`; an early win from a saved prefix needs no tactical work.
+
+In caves that initially lack enough loose diamonds, a branch with enough real collected/pending supply enters a harvest phase. Within that phase, outcome fitness guides collection and escape; it is expanded ahead of further generation setups. Learned weights continue to guide setup branches. This prevents supply/preparation multipliers from making the player abandon a successful blast or avoid collecting its diamonds. Search namespace `s5` separates expansions from earlier strategies while retaining old decisions, priorities, partial recordings, and archive records. `test/butterfly-planning.test.mjs` checks an invented shaft fixture, required rock relocation, actual blast supply, bounded work, and an exact escape even with collection-averse scoring weights.
+
 ## Asset maintenance
 
 - `npm run build:sid` verifies pinned upstream hashes and regenerates the reSID module wrapper.
