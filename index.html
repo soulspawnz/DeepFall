@@ -9,11 +9,13 @@
   <link rel="stylesheet" href="audio.css">
   <link rel="stylesheet" href="campaign.css">
   <link rel="stylesheet" href="fullscreen.css">
+  <link rel="stylesheet" href="presentation.css">
 </head>
 <body>
   <header class="topbar"><a class="brand" href="./"><span class="brand-mark">◆</span> SUBTERRA<span class="brand-small">SOFTWORKS</span></a><span class="edition">FIELD EXPERIMENT Nº 001 <i></i> PLAYABLE BUILD</span><button id="sound" class="quiet" aria-pressed="false">SOUND OFF ↗</button></header>
   <main>
     <section class="intro"><div><p class="eyebrow">A LOVE LETTER TO THE UNDERGROUND · EST. 1984 / REIMAGINED</p><h1>DEEP<span>FALL</span><sup>01</sup></h1><p class="tagline">One more diamond. One wrong move.</p></div><p class="intro-note">Dig deep. Think ahead.<br>The mountain remembers<br>every move you make.</p></section>
+    <section class="presentation-bar" aria-label="Game presentation"><label for="presentation">LOOK &amp; SOUND <select id="presentation"><option value="retro">C64 · Original</option><option value="lumen">Lumen · Enhanced</option></select></label><p id="presentation-description">Green phosphor pixels. Authentic SID synthesis.</p></section>
     <section class="play-layout">
       <div class="cabinet">
         <div class="instrument"><div><small>CAVE <span id="cave-number">01 / 03</span></small><strong id="cave-name">FIRST LIGHT</strong></div><div class="readout gems"><small>DIAMONDS</small><strong><span id="diamonds">00</span><span class="dim"> / </span><span id="target">12</span></strong></div><div class="readout"><small>TIME LEFT</small><strong id="timer">02:30</strong></div><div class="readout score"><small>SCORE</small><strong id="score">000000</strong></div></div>
@@ -34,7 +36,7 @@
     </section>
     <div class="touch-controls" aria-label="Touch controls"><div class="dpad"><button data-dir="up" aria-label="Move up">↑</button><button data-dir="left" aria-label="Move left">←</button><button data-dir="down" aria-label="Move down">↓</button><button data-dir="right" aria-label="Move right">→</button></div><button id="snap-touch" aria-pressed="false">SNAP DIG</button></div>
     <section class="sid-panel" aria-label="SID audio controls">
-      <div class="sid-heading"><span class="eyebrow">THE SOUND OF SILICON</span><strong>SID / THREE VOICES. ONE CHIP.</strong><small id="sid-state" role="status">AUDIO OFF / CLICK SOUND TO START</small></div>
+      <div class="sid-heading"><span class="eyebrow" id="audio-eyebrow">THE SOUND OF SILICON</span><strong id="audio-title">SID / THREE VOICES. ONE CHIP.</strong><small id="sid-state" role="status">AUDIO OFF / CLICK SOUND TO START</small></div>
       <div class="sid-controls"><label>CHIP <select id="sid-model"><option value="6581">MOS 6581</option><option value="8580">MOS 8580</option></select></label><button id="sid-music" aria-pressed="true">MUSIC ON</button><button id="sid-effects" aria-pressed="true">EFFECTS ON</button><label>VOLUME <input id="sid-volume" aria-label="SID volume" type="range" min="0" max="100" value="58"></label><button id="sid-demo">SID SOUND CHECK</button></div>
       <div class="sid-telemetry"><meter id="sid-meter" min="0" max="1" value="0" aria-label="SID output level"></meter><span id="sid-readout">reSID EMULATION / 50 Hz TRACKER / ORIGINAL SCORE</span><a href="./vendor/jssid/LICENSE.md" target="_blank" rel="noopener">CREDITS / LICENSE</a></div>
     </section>

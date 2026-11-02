@@ -46,7 +46,9 @@ After 1.2 seconds of confirmed entrapment, the timer drains at 10× speed. Idlin
 
 ## Sound
 
-Click **SOUND** to enable audio, then choose MOS 6581 or MOS 8580, volume, music, and effects. **SID SOUND CHECK** auditions the effects.
+Use **LOOK & SOUND** above the cave to choose **C64 · Original** or **Lumen · Enhanced**. Lumen adds new vector artwork, sparkling emeralds, animated creatures, a helmeted explorer and original stereo synth music/effects with cave reverb. Switch during a run without restarting it; your choice is remembered on this device. The C64 presentation remains the default, with its green sprite atlas and SID audio. Classic/Echo rules, learning and replays work with either presentation. [Presentation details and checks](docs/PRESENTATION.md).
+
+Click **SOUND** to enable audio. Both presentations have volume, music, effects and a sound-check button. In the C64 presentation, choose MOS 6581 or MOS 8580; this chip selector is disabled for Lumen's separate stereo synth.
 
 The original campaign uses extracted C64 gameplay sound routines and an optional original title tune adapted to share the SID with gameplay effects. The Deepfall campaign has a custom score. Pause and death use newly composed SID themes; the death theme ends rather than sustaining indefinitely. Hidden tabs and SOUND OFF stay silent. Live search previews are muted.
 

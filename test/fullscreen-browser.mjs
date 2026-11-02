@@ -4,6 +4,7 @@ const {chromium}=await import(pathToFileURL(process.argv[2]).href);
 const browser=await chromium.launch({headless:true,executablePath:process.argv[3]});
 try{
  const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
+ if(process.argv.includes('--lumen'))await page.addInitScript(()=>localStorage.setItem('deepfall.presentation','lumen'));
  page.on('pageerror',e=>errors.push(e.message));
  if(process.argv.includes('--local-ui'))for(const file of ['fullscreen.mjs','fullscreen.css'])await page.route(new URL(file,process.argv[5]??'http://127.0.0.1:8767/').href,route=>route.fulfill({path:new URL('../'+file,import.meta.url).pathname.replace(/^\/([A-Z]:)/,'$1'),contentType:file.endsWith('.css')?'text/css':'text/javascript'}));
  await page.goto(process.argv[5]??'http://127.0.0.1:8767/',{waitUntil:'networkidle'});

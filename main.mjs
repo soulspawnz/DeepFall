@@ -2,6 +2,8 @@ import { drawOriginal, drawRockford, spritesLoaded } from './sprites.mjs';
 import { Game, CAVES as EXPEDITION_CAVES, WIDTH, HEIGHT, STEP } from './engine.mjs';
 import { ORIGINAL_CAVES, decodeOriginal, nextOriginal } from './original-caves.mjs';
 import { SIDAudio } from './audio.mjs';
+import { LumenAudio } from './lumen-audio.mjs';
+import { drawLumen,drawLumenPlayer } from './lumen-sprites.mjs';
 import { setupFullscreen } from './fullscreen.mjs';
 import {LiveRecording, loadLiveRuns, saveLiveRun, applyReplayAction,importLiveRun} from './live-replays.mjs';
 import {mountLearning} from './learning-ui.mjs';
@@ -10,12 +12,29 @@ import {cloneGame} from './simulation.mjs';
 const $ = id => document.getElementById(id);
 const canvas = $('game'), ctx = canvas.getContext('2d');
 const TILE = 16;
+let presentation='retro';try{if(localStorage.getItem('deepfall.presentation')==='lumen')presentation='lumen';}catch{}
 let campaign = 'original', difficulty = 1, selected = 0, mode = 'classic';
 let game = new Game(0, mode, null, {campaign,difficulty});
 let viewWidth=WIDTH, viewHeight=HEIGHT;
 let held = [], snap = false, touchSnap = false, last = 0, accumulator = 0, flash = 0;
 let sound = false;
-const sidAudio = new SIDAudio(updateAudio);
+const retroAudio=new SIDAudio(data=>{if(sidAudio===retroAudio)updateAudio(data);});
+const lumenAudio=new LumenAudio(data=>{if(sidAudio===lumenAudio)updateAudio(data);});
+let sidAudio=presentation==='lumen'?lumenAudio:retroAudio;
+let lumenPose={x:-1,y:-1,at:0,facing:1};
+const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+function sizeCanvas(){const scale=presentation==='lumen'?3:1;canvas.width=viewWidth*TILE*scale;canvas.height=viewHeight*TILE*scale;}
+function presentationUI(){
+ document.body.dataset.presentation=presentation;$('presentation').value=presentation;
+ const enhanced=presentation==='lumen';
+ $('presentation-description').textContent=enhanced?'Faceted emeralds. Living caves. A new stereo soundtrack.':'Green phosphor pixels. Authentic SID synthesis.';
+ $('audio-eyebrow').textContent=enhanced?'THE SOUND OF THE UNDERGROUND':'THE SOUND OF SILICON';
+ $('audio-title').textContent=enhanced?'LUMEN / CRYSTAL SYNTH & CAVE REVERB':'SID / THREE VOICES. ONE CHIP.';
+ $('sid-model').disabled=enhanced;$('sid-demo').textContent=enhanced?'LUMEN SOUND CHECK':'SID SOUND CHECK';
+ document.querySelector('.sid-panel').setAttribute('aria-label',enhanced?'Enhanced audio controls':'SID audio controls');
+ if(!sound)$('sid-readout').textContent=enhanced?'ORIGINAL STEREO SYNTHESIS / LUMEN':'reSID EMULATION / PAL / ORIGINAL GAMEPLAY EFFECTS';
+ sizeCanvas();
+}
 const completed = new Set();
 let replay=null;
 let recording=null;
@@ -162,12 +181,12 @@ function newGame(index = selected, keepReplay=false) {
   selected = index; game = new Game(index, mode, null, {campaign,difficulty,fastTrappedTimer}); held = []; snap = false;
   recording=keepReplay?null:new LiveRecording({campaign,index,difficulty,mode,fastTrappedTimer});
   viewWidth=game.bonus?20:WIDTH; viewHeight=game.bonus?12:HEIGHT;
-  canvas.width=viewWidth*TILE; canvas.height=viewHeight*TILE;
+  sizeCanvas();
   accumulator = 0; flash = 0;
   sidAudio.configure({profile:campaign});sidAudio.reset();
   $('sid-music').disabled=false;$('sid-music').textContent=sidAudio.settings.music?'MUSIC ON':'MUSIC OFF';
   $('sid-music').setAttribute('aria-pressed',String(sidAudio.settings.music));
-  if(!sound)$('sid-readout').textContent=campaign==='original'?'reSID EMULATION / PAL / ORIGINAL GAMEPLAY EFFECTS':'reSID EMULATION / PAL / DEEPFALL SCORE';
+  if(!sound)$('sid-readout').textContent=presentation==='lumen'?'ORIGINAL STEREO SYNTHESIS / LUMEN':campaign==='original'?'reSID EMULATION / PAL / ORIGINAL GAMEPLAY EFFECTS':'reSID EMULATION / PAL / DEEPFALL SCORE';
   updateCaves(); sync();
   learningUI?.refresh();
 }
@@ -266,12 +285,18 @@ function drawPlanningBranches(){
 }
 function draw(now) {
  const game=displayedGame();
- ctx.imageSmoothingEnabled=false;ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);
- const frame=Math.floor(now/50);
- for(let y=0;y<viewHeight;y++)for(let x=0;x<viewWidth;x++)drawOriginal(ctx,game.tile(x,y),x,y,frame,game);
+ const enhanced=presentation==='lumen',scale=enhanced?3:1;ctx.setTransform(scale,0,0,scale,0,0);
+ ctx.imageSmoothingEnabled=enhanced;ctx.fillStyle=enhanced?'#071415':'#000';ctx.fillRect(0,0,viewWidth*TILE,viewHeight*TILE);
+ const frame=enhanced&&reducedMotion.matches?0:Math.floor(now/50);
+ for(let y=0;y<viewHeight;y++)for(let x=0;x<viewWidth;x++)(enhanced?drawLumen:drawOriginal)(ctx,game.tile(x,y),x,y,frame,game);
  if(trainingPreview)drawPlanningBranches();
  const direction=directionKeys[held.at(-1)]??directionNames[held.at(-1)];
- if(game.born&&game.playerAlive)drawRockford(ctx,game.player.x,game.player.y,frame,direction?.[0]??null);
+ if(game.born&&game.playerAlive){
+  if(enhanced){
+   const {x,y}=game.player;if(x!==lumenPose.x||y!==lumenPose.y){if(x!==lumenPose.x)lumenPose.facing=x<lumenPose.x?-1:1;lumenPose={x,y,at:now,facing:lumenPose.facing};}
+   drawLumenPlayer(ctx,x,y,frame,lumenPose.facing,!reducedMotion.matches&&now-lumenPose.at<150);
+  }else drawRockford(ctx,game.player.x,game.player.y,frame,direction?.[0]??null);
+ }
 }
 spritesLoaded.catch(error=>{ $('status-text').textContent=error.message; });
 function loop(now) {
@@ -337,18 +362,19 @@ $('restart').addEventListener('click', () => { newGame(); play(); });
 $('rewind').addEventListener('click', () => { if (!replay && game.rewind()) { recording?.rewind();sounds(); sync(); canvas.focus({ preventScroll: true }); } });
 async function enableAudio() {
   $('sound').disabled = true;
-  $('sid-state').textContent = 'STARTING SID';
+  $('presentation').disabled=true;
+  $('sid-state').textContent = presentation==='lumen'?'STARTING LUMEN':'STARTING SID';
   try {
     await sidAudio.enable(); sound = true;
     $('sound').textContent = 'SOUND ON'; $('sound').setAttribute('aria-pressed', 'true');
-    $('sid-state').textContent = `MOS ${sidAudio.settings.model} / PAL / MONO`;
+    $('sid-state').textContent = presentation==='lumen'?'LUMEN / STEREO':`MOS ${sidAudio.settings.model} / PAL / MONO`;
     return true;
   } catch (error) {
     sound = false; $('sound').textContent = 'RETRY AUDIO';
     $('sound').setAttribute('aria-pressed', 'false');
     $('sid-state').textContent = `AUDIO ERROR: ${error.message}`;
     return false;
-  } finally { $('sound').disabled = false; }
+  } finally { $('sound').disabled = false;$('presentation').disabled=false; }
 }
 function updateAudio(data) {
   if (data.error) {
@@ -357,15 +383,15 @@ function updateAudio(data) {
     $('sid-state').textContent = data.error; return;
   }
   if (!sound) return;
-  $('sid-state').textContent = `MOS ${data.model} / PAL / MONO`;
+  $('sid-state').textContent = presentation==='lumen'?'LUMEN / STEREO / CAVE REVERB':`MOS ${data.model} / PAL / MONO`;
   $('sid-meter').value = data.peak ?? 0;
-  $('sid-readout').textContent = `${data.writes} REG WRITES / ${data.effects} FX / LAST: ${data.lastEffect.toUpperCase()}`;
+  $('sid-readout').textContent = presentation==='lumen'?`STEREO SYNTH / ${data.effects} FX / LAST: ${data.lastEffect.toUpperCase()}`:`${data.writes} REG WRITES / ${data.effects} FX / LAST: ${data.lastEffect.toUpperCase()}`;
 }
 $('sound').addEventListener('click', async () => {
   if (sound) {
     sidAudio.disable(); sound = false;
     $('sound').textContent = 'SOUND OFF'; $('sound').setAttribute('aria-pressed', 'false');
-    $('sid-state').textContent = 'SID MUTED'; $('sid-meter').value = 0;
+    $('sid-state').textContent = presentation==='lumen'?'LUMEN MUTED':'SID MUTED'; $('sid-meter').value = 0;
   } else await enableAudio();
 });
 $('sid-demo').addEventListener('click', async () => {
@@ -381,6 +407,13 @@ for (const name of ['music', 'effects']) $('sid-' + name).addEventListener('clic
   if(enabled&&!sound)await enableAudio();
 });
 $('sid-volume').addEventListener('input', () => sidAudio.configure({ master: Number($('sid-volume').value) / 100 * .6 }));
+$('presentation').addEventListener('change',async()=>{
+ const next=$('presentation').value==='lumen'?'lumen':'retro';if(next===presentation)return;
+ const settings={...sidAudio.settings},wasOn=sound;sidAudio.disable();presentation=next;
+ sidAudio=presentation==='lumen'?lumenAudio:retroAudio;sidAudio.configure(settings);sidAudio.reset();
+ try{localStorage.setItem('deepfall.presentation',presentation);}catch{}
+ presentationUI();sync();if(wasOn)await enableAudio();else $('sid-state').textContent='AUDIO OFF / CLICK SOUND TO START';
+});
 $('campaign').addEventListener('change',()=>{
   campaign=$('campaign').value; $('difficulty').disabled=campaign!=='original'; newGame(0);
 });
@@ -409,7 +442,7 @@ $('snap-touch').addEventListener('click', () => {
   touchSnap = !touchSnap; $('snap-touch').setAttribute('aria-pressed', String(touchSnap));
   $('snap-touch').textContent = touchSnap ? 'SNAP DIG ON' : 'SNAP DIG';
 });
-setupFullscreen(); newGame();
+setupFullscreen(); presentationUI();newGame();
 learningUI=mountLearning({
  getContext:()=>({campaign,index:selected,difficulty}),
  pause:()=>{if(game.status==='playing'){game.pause();sync();}},

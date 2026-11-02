@@ -5,7 +5,7 @@ const browser=await chromium.launch({headless:true,executablePath:process.argv[3
 try {
  const page=await browser.newPage({viewport:{width:1440,height:1200}}),errors=[];
  page.on('pageerror',e=>errors.push(e.message));
- await page.goto('http://127.0.0.1:8767/',{waitUntil:'networkidle'});
+ await page.goto(process.argv[5]??'http://127.0.0.1:8767/',{waitUntil:'networkidle'});
  const palette=await page.evaluate(async()=>{
   const {atlas,spritesLoaded}=await import('/sprites.mjs');await spritesLoaded;
   const pixels=atlas.getContext('2d').getImageData(0,0,atlas.width,atlas.height).data;

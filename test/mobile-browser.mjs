@@ -13,6 +13,7 @@ try{
   const context=await browser.newContext({viewport:{width,height},hasTouch:true,isMobile:true,deviceScaleFactor:1}),page=await context.newPage(),errors=[];
   try{
   page.on('pageerror',e=>errors.push(e.message));
+  if(process.argv.includes('--lumen'))await page.addInitScript(()=>localStorage.setItem('deepfall.presentation','lumen'));
   if(localUI)for(const file of ['fullscreen.mjs','fullscreen.css'])await context.route(new URL(file,base).href,route=>route.fulfill({path:new URL('../'+file,import.meta.url).pathname.replace(/^\/([A-Z]:)/,'$1'),contentType:file.endsWith('.css')?'text/css':'text/javascript'}));
   await page.addInitScript(()=>{const Native=window.AudioContext;window.__mobileGains=[];window.AudioContext=class extends Native{constructor(...a){super(...a);window.__mobileAudio=this;}createGain(){const n=super.createGain();window.__mobileGains.push(n);return n;}};});
   await page.goto(base,{waitUntil:'networkidle'});
@@ -54,11 +55,11 @@ try{
    await page.locator('#sound').tap();await page.evaluate(()=>{const c=window.__mobileAudio,a=c.createAnalyser();a.fftSize=2048;window.__mobileGains[0].connect(a);const sink=c.createGain();sink.gain.value=0;a.connect(sink);sink.connect(c.destination);window.__mobileAC=()=>{const s=new Float32Array(a.fftSize);a.getFloatTimeDomainData(s);const m=s.reduce((n,v)=>n+v,0)/s.length;return Math.sqrt(s.reduce((n,v)=>n+(v-m)**2,0)/s.length);};});await page.waitForFunction(()=>window.__mobileAC()>.00001);await page.locator('#sound').tap();await page.waitForFunction(()=>window.__mobileAudio.state==='suspended'&&document.querySelector('#sound').getAttribute('aria-pressed')==='false');
    // Suspension freezes analyser data/parameter sampling. Resume only this
    // isolated diagnostic context to verify the output gate, then suspend it.
-   await page.evaluate(()=>window.__mobileAudio.resume());await page.waitForFunction(()=>window.__mobileAC()<1e-6&&window.__mobileGains[0].gain.value===0);await page.evaluate(()=>window.__mobileAudio.suspend());sound='real SID AC output; sound off suspends; isolated resume confirms zero-gain silence';
+   await page.evaluate(()=>window.__mobileAudio.resume());await page.waitForFunction(()=>window.__mobileAC()<1e-6&&window.__mobileGains[0].gain.value===0);await page.evaluate(()=>window.__mobileAudio.suspend());sound=(process.argv.includes('--lumen')?'Lumen stereo':'SID')+' AC output; sound off suspends; isolated resume confirms zero-gain silence';
   }
   assert.deepEqual(errors,[]);reports.push({name,viewport:{width,height},normal,fullscreen:full,rotated,sound,errors,checks:['all directions','hold/release','drag/cancel','snap collect without moving','pause/resume','Echo rewind','original campaign','4:3 fullscreen fallback','orientation change','restart']});console.log('[OK] '+name+': touch gameplay, cancellation, snap, Echo, original cave, rotation and fullscreen');
   }catch(error){reports.push({name,error:String(error.stack??error)});console.error('[FAIL] '+name+': '+error.message);await page.screenshot({path:resolve(output,name+'-failure.png')}).catch(()=>{});}finally{await context.close();}
  }
- await writeFile(resolve(output,'mobile-results.json'),JSON.stringify({base,localUI,engine:'Chromium touch emulation; not physical devices or Safari',reports},null,2));
+ await writeFile(resolve(output,'mobile-results.json'),JSON.stringify({base,localUI,presentation:process.argv.includes('--lumen')?'lumen':'retro',engine:'Chromium touch emulation; not physical devices or Safari',reports},null,2));
  assert(reports.length&&reports.every(r=>!r.error),'See mobile-results.json for failed profiles');
 }finally{await browser.close();}
