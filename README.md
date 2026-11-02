@@ -54,6 +54,8 @@ One emulated three-voice chip handles all synthesis. This is a browser adaptatio
 
 ## Learning player
 
+[Open the published training demo](https://soulspawnz.github.io/DeepFall/?demo=1#learning-player) on any device to see the recorded graphs, learned priorities and playable AI attempts. The **History source** selector switches between this read-only snapshot and your own browser's learning. The snapshot includes 447 runs and nine cave models; it does not replace local data or train automatically. See [snapshot contents and limitations](docs/training/README.md).
+
 1. Select a campaign, cave, and difficulty.
 2. Choose **1, 5, 10, 25, 50, or 100** attempts and **Auto** exploration, or a fixed percentage.
 3. Click **TRAIN PLAYER**. **Render training in game** is enabled by default; uncheck it for background training. **Show search rewinds** defaults off for smooth playback of each completed attempt; enable it to watch changing search candidates.

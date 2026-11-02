@@ -2,6 +2,8 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 
 const files = new Map([
+  ['/published-training.mjs',['published-training.mjs','text/javascript; charset=utf-8']],
+  ['/docs/training/snapshot.json',['docs/training/snapshot.json','application/json; charset=utf-8']],
   ...['simulation.mjs','learning-player.mjs','learning-worker.mjs','learning-ui.mjs','learning-archive.mjs','route-planner.mjs'].map(file=>['/'+file,[file,'text/javascript; charset=utf-8']]),
   ['/live-replays.mjs',['live-replays.mjs','text/javascript; charset=utf-8']],
   ['/playtests.css',['playtests.css','text/css; charset=utf-8']],

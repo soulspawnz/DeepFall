@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {verifyLearningReplay,validateLearningModel,learningProgress} from '../learning-archive.mjs';
+import {contextKey} from '../learning-player.mjs';
+const snapshot=JSON.parse(await readFile(new URL('../docs/training/snapshot.json',import.meta.url),'utf8'));
+assert.equal(snapshot.format,'deepfall-published-training-1');
+assert.equal(snapshot.runs.length,447);assert.equal(snapshot.models.length,9);
+assert.equal(new Set(snapshot.runs.map(r=>r.id)).size,snapshot.runs.length);
+for(const record of snapshot.runs)verifyLearningReplay(record);
+for(const model of snapshot.models)validateLearningModel(model,model.context);
+const records=index=>snapshot.runs.filter(r=>r.contextKey===contextKey({campaign:'original',difficulty:1,index}));
+assert.equal(learningProgress(snapshot.runs).summary.count,367);
+assert.equal(learningProgress(records(1)).summary.firstWin,196);
+assert.equal(learningProgress(records(7)).summary.firstWin,8);
+assert.ok(snapshot.runs.some(r=>r.reconstructed));
+assert.ok(snapshot.runs.some(r=>r.kind==='evaluation'));assert.ok(snapshot.runs.some(r=>r.kind==='baseline'));
+assert.ok(snapshot.runs.some(r=>r.run.status==='dead'));assert.ok(snapshot.runs.some(r=>r.run.status==='budget'));
+console.log('[OK] All 447 published traces reproduce their outcomes; nine models validate; plateaus, failures, evaluations and reconstruction provenance retained.');

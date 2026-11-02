@@ -4,7 +4,7 @@ const {chromium}=await import(pathToFileURL(process.argv[2]).href);
 const browser=await chromium.launch({headless:true,executablePath:process.argv[3]});
 try{
  const page=await browser.newPage({viewport:{width:1440,height:1100}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('http://127.0.0.1:8767/',{waitUntil:'networkidle'});
+ await page.goto(process.argv[5]??'http://127.0.0.1:8767/',{waitUntil:'networkidle'});
  await page.evaluate(async()=>{
   const {LearningPlayer}=await import('./learning-player.mjs'),{Game}=await import('./engine.mjs'),{learningReplay,saveLearningRecords}=await import('./learning-archive.mjs');
   const context={campaign:'original',index:0,difficulty:1},p=new LearningPlayer(context),won=p.run({learn:false});

@@ -188,4 +188,5 @@
 @media(max-width:600px){.learning-results th,.learning-results td{padding:5px 3px;font-size:11px}.learning-results button{padding:5px 3px;font-size:10px}}
 .branch-toggle{display:flex;align-items:center;gap:.45rem;font:inherit;color:#b7c7c1;cursor:pointer;white-space:nowrap}.branch-toggle input{accent-color:#78dce8}.branch-toggle[hidden]{display:none}
 .learning-preview-help{font-size:.8rem;line-height:1.5;color:#91a09a;margin:.25rem 0 0}
+.learning-source{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-bottom:.5rem;font-size:.85rem}.learning-source select{max-width:100%;min-height:44px;background:#15200f;color:#d5e4b5;padding:9px;border:1px solid #53643d;font:inherit}
 .learning-priority-details{margin-top:.7rem;font-size:.8rem}.learning-priority-details table{width:100%;border-collapse:collapse}.learning-priority-details th,.learning-priority-details td{padding:.25rem .4rem;text-align:left}.learning-priority-details td{text-align:right;font-variant-numeric:tabular-nums}.learning-priority-details p{line-height:1.5}
