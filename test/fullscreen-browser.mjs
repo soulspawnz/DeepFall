@@ -5,6 +5,7 @@ const browser=await chromium.launch({headless:true,executablePath:process.argv[3
 try{
  const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
  page.on('pageerror',e=>errors.push(e.message));
+ if(process.argv.includes('--local-ui'))for(const file of ['fullscreen.mjs','fullscreen.css'])await page.route(new URL(file,process.argv[5]??'http://127.0.0.1:8767/').href,route=>route.fulfill({path:new URL('../'+file,import.meta.url).pathname.replace(/^\/([A-Z]:)/,'$1'),contentType:file.endsWith('.css')?'text/css':'text/javascript'}));
  await page.goto(process.argv[5]??'http://127.0.0.1:8767/',{waitUntil:'networkidle'});
  await page.locator('#fullscreen').click();
  await page.waitForFunction(()=>document.querySelector('#fullscreen').getAttribute('aria-pressed')==='true');
@@ -22,6 +23,6 @@ try{
  assert.equal(await page.locator('.cabinet .touch-controls').count(),1);
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await page.keyboard.press('Escape');assert.equal(await page.locator('#fullscreen').getAttribute('aria-pressed'),'false');
- assert.equal(await page.locator('.cabinet .touch-controls').count(),0);
+ assert.equal(await page.locator('.cabinet .touch-controls').count(),1);
  assert.deepEqual(errors,[]);console.log('[OK] Native 4:3 fullscreen, F exit, mobile fallback, touch controls and Escape exit.');
 }finally{await browser.close();}

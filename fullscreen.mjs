@@ -3,7 +3,8 @@ export function setupFullscreen() {
  const button=document.createElement('button');button.id='fullscreen';button.className='quiet';
  button.title='Fullscreen 4:3 (F)';button.setAttribute('aria-pressed','false');
  document.querySelector('#pause').parentElement.append(button);
- const touch=document.querySelector('.touch-controls'),home=touch.parentElement,anchor=touch.nextSibling;
+ const touch=document.querySelector('.touch-controls');cabinet.append(touch);
+ const home=touch.parentElement,anchor=touch.nextSibling;
  let fallback=false;
  const active=()=>document.fullscreenElement===cabinet||fallback;
  function sync(){

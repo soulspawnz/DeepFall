@@ -38,6 +38,8 @@ No build, runtime package installation, account, or API key is required. Game as
 
 Horizontal pushes need clear space beyond the rock; original-campaign pushes also use a chance-based rule. Mobile controls support held directions. Losing window focus pauses manual play. Changing cave, difficulty, or mode starts a fresh cave.
 
+On touch devices, the direction pad and snap toggle sit beside the game in its cabinet. Fullscreen keeps a 4:3 stage and places the pad to the side on short landscape screens. [Mobile behavior and verification](docs/MOBILE.md).
+
 **Classic** disables rewinds and fall warnings. **Echo** adds both. Fullscreen keeps black borders where needed and provides a viewport fallback when native fullscreen is unavailable.
 
 After 1.2 seconds of confirmed entrapment, the timer drains at 10× speed. Idling alone does not trigger this; the engine considers legal pushes and possible world changes. Older recordings retain their recorded timer rules.
